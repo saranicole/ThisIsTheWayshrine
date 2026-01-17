@@ -15,6 +15,18 @@ function TITW.BuildMenu()
   })
 
   panel:AddSetting {
+    type = LAM.ST_CHECKBOX,
+    label = TITW.Lang.PROMPT_TO_JUMP,
+    getFunction = function()
+      return TITW.SV.promptToJump
+    end,
+    setFunction = function(var)
+      TITW.SV.promptToJump = var
+    end,
+    default = TITW.promptToJump
+  }
+
+  panel:AddSetting {
     type = LAM.ST_SECTION,
     label = TITW.Lang.TOGGLE_ZONE_DISCOVERY,
   }
@@ -61,7 +73,7 @@ function TITW.BuildMenu()
       end,
       default = false,
       disable = function()
-        return not ZONE_STORIES_GAMEPAD.IsZoneCollectibleUnlocked(zoneId)
+        return not ZONE_STORIES_GAMEPAD.IsZoneCollectibleUnlocked(zoneId) and not TITW:GetZoneFullyDiscovered(zoneId)
       end
     }
   end

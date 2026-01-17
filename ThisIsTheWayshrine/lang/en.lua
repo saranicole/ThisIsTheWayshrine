@@ -10,4 +10,7 @@ TITW.Lang = {
   ALL_ZONES_TOGGLED                =         "All available zones",
   ENABLED                          =         "enabled",
   DISABLED                         =         "disabled",
+  PROMPT_TO_JUMP                   =         "Confirm travel",
+  JUMP_PROMPT_TITLE                =         "Travel available",
+  JUMP_PROMPT_TEXT                 =         "please confirm or deny travel",
 }
