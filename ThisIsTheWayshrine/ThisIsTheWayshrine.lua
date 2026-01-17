@@ -18,6 +18,7 @@ TITW.zoneNameToId = {}
 TITW.zoneIds = {}
 TITW.controlList = {}
 TITW.toggle = false
+TITW.selectAll = false
 
 local function setupNoop()
   return
@@ -71,98 +72,6 @@ function TITW:enumerateWayshrines(zoneIdex, providedZoneId)
   return {enabled = true, totalWayshrines = totalWayshrines, knownWayshrines = knownWayshrines}
 end
 
-function TITW:EnsureGamepadCheckmark(control, locationName)
-    local zoneId = TITW:GetZoneIdFromZoneName(locationName)
-    if zoneId == nil then return end
-    local controlName = "check_"..zoneId
-    if TITW.controlList[controlName] and TITW.controlList[controlName].titwCheckmark then return end
-    local check = GetControl(controlName)
-    if not check then
-      check = WINDOW_MANAGER:CreateControl(controlName, control, CT_TEXTURE)
-      check:SetDimensions(30, 30)
-      check:SetAnchor(LEFT, control, LEFT, 40, 0)
-      check:SetHidden(true)
-      check:SetTexture("/esoui/art/miscellaneous/check.dds")
-    end
-
-    TITW.controlList[controlName] = check
-
-    local enabled = self.SV.enabledZones[zoneId] ~= nil and self.SV.enabledZones[zoneId].enabled
-    TITW.controlList[controlName]:SetHidden(not enabled)
-end
-
-function TITW:UpdateGamepadZoneCheckmark(control, locationName)
-    self:EnsureGamepadCheckmark(control, locationName)
-end
-
-
-function TITW:controls()
-  local addParams = CENTER_SCREEN_ANNOUNCE:CreateMessageParams(CSA_CATEGORY_SMALL_TEXT, SOUNDS.MAP_PING)
-  addParams:SetCSAType(CENTER_SCREEN_ANNOUNCE_TYPE_POI_DISCOVERED)
-  local removeParams = CENTER_SCREEN_ANNOUNCE:CreateMessageParams(CSA_CATEGORY_SMALL_TEXT, SOUNDS.MAP_PING_REMOVE)
-  removeParams:SetCSAType(CENTER_SCREEN_ANNOUNCE_TYPE_POI_DISCOVERED)
-  return {
-    ToggleDesiredZone = {
-      alignment = KEYBIND_STRIP_ALIGN_LEFT,
-      {
-          name = self.Lang.TOGGLE_ALL_ZONES,
-          keybind = "UI_SHORTCUT_TERTIARY",
-          callback = function()
-            local toggled = nil
-            for zoneId, zoneName in pairs(TITW.zoneIds) do
-                if ZONE_STORIES_GAMEPAD.IsZoneCollectibleUnlocked(zoneId) then
-                  if self.SV.enabledZones[zoneId] == nil then
-                    self.SV.enabledZones[zoneId] = TITW:enumerateWayshrines(nil, zoneId)
-                  end
-                  self.SV.enabledZones[zoneId].enabled = not TITW.toggle
-                end
-            end
-            TITW.toggle = not TITW.toggle
-            if TITW.toggle then
-              toggled = self.Lang.ENABLED
-            else
-              toggled = self.Lang.DISABLED
-            end
-            d(TITW.toggle)
-            if toggled ~= nil then
-              addParams:SetText(self.Lang.ALL_ZONES_TOGGLED.." "..toggled)
-              CENTER_SCREEN_ANNOUNCE:AddMessageWithParams(addParams)
-            end
-            GAMEPAD_WORLD_MAP_LOCATIONS.list:RefreshVisible()
-          end,
-          visible = function()
-            return true
-          end
-        },
-      {
-          name = self.Lang.TOGGLE_ZONE_DISCOVERY,
-          keybind = "UI_SHORTCUT_QUATERNARY",
-          callback = function()
-            local list = GAMEPAD_WORLD_MAP_LOCATIONS.list
-            if not list then
-              return
-            end
-            local locationName = list.selectedData.locationName
-            local zoneId = TITW:GetZoneIdFromZoneName(locationName)
-            if TITW.SV.enabledZones[zoneId] then
-              TITW.SV.enabledZones[zoneId] = nil
-              removeParams:SetText(self.Lang.ZONE_REMOVED.." - "..locationName)
-              CENTER_SCREEN_ANNOUNCE:AddMessageWithParams(removeParams)
-            else
-              TITW.SV.enabledZones[zoneId] = TITW:enumerateWayshrines(nil, zoneId)
-              addParams:SetText(self.Lang.ZONE_ADDED.." - "..locationName)
-              CENTER_SCREEN_ANNOUNCE:AddMessageWithParams(addParams)
-            end
-            GAMEPAD_WORLD_MAP_LOCATIONS.list:RefreshVisible()
-          end,
-          visible = function()
-            return true
-          end
-        },
-      }
-  }
-end
-
 --Account/Character Setting
 function TITW.SwitchSV()
   if TITW.CV.CV then
@@ -181,49 +90,9 @@ local function isKeyInTable(table, element)
   return false
 end
 
-local function setupZoneDisplay(self, control)
-  local location = GAMEPAD_WORLD_MAP_LOCATIONS.list.dataList[GAMEPAD_WORLD_MAP_LOCATIONS.list.targetSelectedIndex + 1]
-  if location then
-    local locationName = location.locationName
-    TITW:UpdateGamepadZoneCheckmark(control, locationName)
-    TITW.hookLock = setupNoop
-  end
-end
-
-function TITW.addUI()
-  GAMEPAD_WORLD_MAP_LOCATIONS_FRAGMENT:RegisterCallback(
-    "StateChange",
-    function(_, newState)
-      if newState == SCENE_SHOWING then
-        TITW.hookLock = setupZoneDisplay
---         for i, data in pairs(GAMEPAD_WORLD_MAP_LOCATIONS.data.mapData) do
---           d(data.locationName)
---         end
---         local child = nil
---         for i = 1, GAMEPAD_WORLD_MAP_LOCATIONS.control:GetNamedChild("MainListScroll"):GetNumChildren() do
---           local testchild = GAMEPAD_WORLD_MAP_LOCATIONS.control:GetNamedChild("MainListScroll"):GetChild(i)
---             d(testchild:GetName())
---         end
-        for i = 1, GAMEPAD_WORLD_MAP_LOCATIONS.control:GetNamedChild("MainListScroll"):GetNumChildren() do
-          local childcontrol = GAMEPAD_WORLD_MAP_LOCATIONS.control:GetNamedChild("MainListScroll"):GetChild(i)
-            local location = GAMEPAD_WORLD_MAP_LOCATIONS.list.dataList[i]
-            if location then
-              local locationName = location.locationName
-              TITW:UpdateGamepadZoneCheckmark(childcontrol, locationName)
-            end
-        end
---         d(GAMEPAD_WORLD_MAP_LOCATIONS.list.dataList[GAMEPAD_WORLD_MAP_LOCATIONS.list.targetSelectedIndex + 1].locationName)
-        ZO_PreHook(GAMEPAD_WORLD_MAP_LOCATIONS, "SetupLocation", TITW.hookLock)
-        KEYBIND_STRIP:AddKeybindButtonGroup(TITW:controls().ToggleDesiredZone)
-      elseif newState == SCENE_HIDDEN then
-        KEYBIND_STRIP:RemoveKeybindButtonGroup(TITW:controls().ToggleDesiredZone)
-      end
-  end) -- end inner register callback
-end -- end function
-
 function TITW:Initialize()
   zo_callLater(self.BuildZoneNameCache, 1500)
-  zo_callLater(self.addUI, 1800)
+  zo_callLater(self.BuildMenu, 1800)
 end
 
 --When Loaded
