@@ -7,19 +7,49 @@ TITW.Name = "ThisIsTheWayshrine"
 
 --Setting
 TITW.Default = {
-  CV = false,
+  CV = true,
   enabledZones = {},
 }
 
 TITW.showing = false
 TITW.hookLock = false
 
+TITW.zoneNameToId = {}
+TITW.zoneIds = {}
+TITW.controlList = {}
+
 local function setupNoop()
   return
 end
 
-function TITW:enumerateWayshrines(zoneIdex)
-  local providedZoneId = ZO_ExplorationUtils_GetParentZoneIdByZoneIndex(zoneIdex)
+function TITW.BuildZoneNameCache()
+    ZO_ClearTable(TITW.zoneNameToId)
+
+    local numZones = GetNumZones()
+    for zoneIndex = 1, numZones do
+        local zoneId = GetZoneId(zoneIndex)
+        if zoneId then
+            local zoneName = GetZoneNameById(zoneId)
+            if zoneName and zoneName ~= "" then
+                TITW.zoneNameToId[zo_strlower(zoneName)] = zoneId
+                TITW.zoneIds[zoneId] = zoneName
+            end
+        end
+    end
+end
+
+function TITW:GetZoneIdFromZoneName(targetName)
+    return self.zoneNameToId[zo_strlower(targetName)]
+end
+
+function TITW:enumerateWayshrines(zoneIdex, providedZoneId)
+  if providedZoneId == nil then
+    if zoneIdex then
+      providedZoneId = ZO_ExplorationUtils_GetParentZoneIdByZoneIndex(zoneIdex)
+    else
+      return {enabled = false, totalWayshrines = 0, knownWayshrines = 0}
+    end
+  end
   local totalWayshrines = 0
   local knownWayshrines = 0
   for i = 1, GetNumFastTravelNodes() do
@@ -29,7 +59,7 @@ function TITW:enumerateWayshrines(zoneIdex)
     if poiType == POI_TYPE_WAYSHRINE then
       local zoneIndex, poiIndex = GetFastTravelNodePOIIndicies(i)
       local checkZId = ZO_ExplorationUtils_GetParentZoneIdByZoneIndex(zoneIndex)
-      if checkZId == providedZoneId then
+      if checkZId == providedZoneId and not linkedCollectibleIsLocked then
         totalWayshrines = totalWayshrines + 1
         if known then
           knownWayshrines = tonumber(knownWayshrines) + 2^(totalWayshrines-1)
@@ -37,43 +67,44 @@ function TITW:enumerateWayshrines(zoneIdex)
       end
     end
   end
-  return {totalWayshrines = totalWayshrines, knownWayshrines = knownWayshrines}
+  return {enabled = true, totalWayshrines = totalWayshrines, knownWayshrines = knownWayshrines}
 end
 
+function TITW:EnsureGamepadCheckmark(control, zoneId)
+    if zoneId == nil then return end
+    local controlName = "check_"..zoneId
+    if TITW.controlList[controlName] and TITW.controlList[controlName].titwCheckmark then return end
 
-function TITW:EnsureGamepadCheckmark(control)
-    if control.titwCheckmark then return end
+    if not GetControl(controlName) then
+      local check = WINDOW_MANAGER:CreateControl(controlName, control, CT_TEXTURE)
 
-    local check = WINDOW_MANAGER:CreateControl(nil, control, CT_TEXTURE)
-
-    check:SetDimensions(20, 20)
-    check:SetAnchor(LEFT, control, LEFT, 12, 0)
-    check:SetTexture("/esoui/art/miscellaneous/check.dds")
-    check:SetHidden(true)
-
-    control.titwCheckmark = check
-
-    -- Shift the label so it doesn't overlap
-    local label = control.label
-    if label then
-        label:ClearAnchors()
-        label:SetAnchor(LEFT, control, LEFT, 44, 0)
+      check:SetDimensions(30, 30)
+      check:SetAnchor(LEFT, control, LEFT, 40, 0)
+      check:SetHidden(true)
+      check:SetTexture("/esoui/art/miscellaneous/check.dds")
+      TITW.controlList[controlName] = check
+    else
+      TITW.controlList[controlName] = GetControl(controlName)
     end
+    local enabled = self.SV.enabledZones[zoneId] ~= nil and self.SV.enabledZones[zoneId].enabled
+    TITW.controlList[controlName]:SetHidden(not enabled)
 end
 
 function TITW:UpdateGamepadZoneCheckmark(control, data)
     -- Ignore category headers
     if data and data.isHeader then
-        if control.titwCheckmark then
-            control.titwCheckmark:SetHidden(true)
+        if TITW.controlList[controlName].titwCheckmark then
+            TITW.controlList[controlName].titwCheckmark:SetHidden(true)
         end
         return
     end
-
-    self:EnsureGamepadCheckmark(control)
-
-    local enabled = self.SV.enabledZones[data.zoneId] ~= nil
-    control.titwCheckmark:SetHidden(not enabled)
+    local list = GAMEPAD_WORLD_MAP_LOCATIONS.list
+    if not list then
+      return
+    end
+    local locationName = list.selectedData.locationName
+    local zoneId = TITW:GetZoneIdFromZoneName(locationName)
+    self:EnsureGamepadCheckmark(control, zoneId)
 end
 
 
@@ -89,28 +120,19 @@ function TITW:controls()
           name = self.Lang.TOGGLE_ALL_ZONES,
           keybind = "UI_SHORTCUT_TERTIARY",
           callback = function()
-            if not GAMEPAD_WORLD_MAP_LOCATIONS or not GAMEPAD_WORLD_MAP_LOCATIONS.list then
-                return
-            end
 
-            local list = GAMEPAD_WORLD_MAP_LOCATIONS.list
-            local dataList = ZO_ScrollList_GetDataList(list)
-
-            for _, entry in ipairs(dataList) do
-                local data = entry.data
-
-                -- Skip category headers
-                if not data.isHeader then
-                    -- Unlocked zones are not locked
-                    if not data.isLocked and data.zoneId then
-                        self.SV.enabledZones[data.zoneId] = true
-                        GAMEPAD_WORLD_MAP_LOCATIONS.list:RefreshVisible()
-                    end
+            for zoneId, zoneName in pairs(TITW.zoneIds) do
+                if ZO_ZoneStories_Shared.IsZoneCollectibleUnlocked(zoneId) then
+                  if self.SV.enabledZones[zoneId] == nil then
+                    self.SV.enabledZones[zoneId] = TITW:enumerateWayshrines(nil, zoneId)
+                  else
+                    self.SV.enabledZones[zoneId].enabled = not self.SV.enabledZones[zoneId].enabled
+                  end
                 end
             end
+            GAMEPAD_WORLD_MAP_LOCATIONS.list:RefreshVisible()
             addParams:SetText(self.Lang.ALL_ZONES_TOGGLED)
             CENTER_SCREEN_ANNOUNCE:AddMessageWithParams(addParams)
-            CENTER_SCREEN_ANNOUNCE:DisplayMessage(addParams)
           end,
           visible = function()
             return true
@@ -120,16 +142,20 @@ function TITW:controls()
           name = self.Lang.TOGGLE_ZONE_DISCOVERY,
           keybind = "UI_SHORTCUT_QUATERNARY",
           callback = function()
-            if TITW.SV.enabledZones[GAMEPAD_WORLD_MAP_LOCATIONS.selectedData.index] then
-              TITW.SV.enabledZones[GAMEPAD_WORLD_MAP_LOCATIONS.selectedData.index] = nil
-              addParams:SetText(self.Lang.ZONE_ADDED.." - "..GAMEPAD_WORLD_MAP_LOCATIONS.selectedData.text)
-              CENTER_SCREEN_ANNOUNCE:AddMessageWithParams(addParams)
-              CENTER_SCREEN_ANNOUNCE:DisplayMessage(addParams)
-            elseif GAMEPAD_WORLD_MAP_LOCATIONS.selectedData and GAMEPAD_WORLD_MAP_LOCATIONS.selectedData.index then
-              TITW.SV.enabledZones[GAMEPAD_WORLD_MAP_LOCATIONS.selectedData.index] = TITW:enumerateWayshrines(GAMEPAD_WORLD_MAP_LOCATIONS.selectedData.index)
-              removeParams:SetText(self.Lang.ZONE_REMOVED.." - "..GAMEPAD_WORLD_MAP_LOCATIONS.selectedData.text)
+            local list = GAMEPAD_WORLD_MAP_LOCATIONS.list
+            if not list then
+              return
+            end
+            local locationName = list.selectedData.locationName
+            local zoneId = TITW:GetZoneIdFromZoneName(locationName)
+            if TITW.SV.enabledZones[zoneId] then
+              TITW.SV.enabledZones[zoneId] = nil
+              removeParams:SetText(self.Lang.ZONE_REMOVED.." - "..locationName)
               CENTER_SCREEN_ANNOUNCE:AddMessageWithParams(removeParams)
-              CENTER_SCREEN_ANNOUNCE:DisplayMessage(removeParams)
+            else
+              TITW.SV.enabledZones[zoneId] = TITW:enumerateWayshrines(nil, zoneId)
+              addParams:SetText(self.Lang.ZONE_ADDED.." - "..locationName)
+              CENTER_SCREEN_ANNOUNCE:AddMessageWithParams(addParams)
             end
             GAMEPAD_WORLD_MAP_LOCATIONS.list:RefreshVisible()
           end,
@@ -164,32 +190,23 @@ local function setupZoneDisplay(self, control, data)
   TITW.hookLock = setupNoop
 end
 
-local function addZoneHook()
-  ZO_PreHook(GAMEPAD_WORLD_MAP_LOCATIONS, "SetupZone", TITW.hookLock)
-end
-
-function TITW:addUI()
---   world_map_scene = SCENE_MANAGER:GetScene("gamepad_worldMap")
---   SCENE_MANAGER:RegisterCallback("SceneStateChanged", function(scene, newState)
---     local sceneName = scene:GetName()
---     if sceneName == "gamepad_worldMap" and newState == SCENE_SHOWING then
-      TITW.hookLock = setupZoneDisplay
-      GAMEPAD_WORLD_MAP_LOCATIONS_FRAGMENT:RegisterCallback(
-        "StateChange",
-        function(_, newState)
-          if newState == SCENE_SHOWING then
-            addZoneHook()
-            KEYBIND_STRIP:AddKeybindButtonGroup(TITW:controls().ToggleDesiredZone)
-          elseif newState == SCENE_HIDDEN then
-            KEYBIND_STRIP:RemoveKeybindButtonGroup(TITW:controls().ToggleDesiredZone)
-          end
-      end) -- end inner register callback
---     end -- end if sceneName
---   end) -- end outer register callback
+function TITW.addUI()
+  GAMEPAD_WORLD_MAP_LOCATIONS_FRAGMENT:RegisterCallback(
+    "StateChange",
+    function(_, newState)
+      if newState == SCENE_SHOWING then
+        TITW.hookLock = setupZoneDisplay
+        ZO_PreHook(GAMEPAD_WORLD_MAP_LOCATIONS, "SetupLocation", TITW.hookLock)
+        KEYBIND_STRIP:AddKeybindButtonGroup(TITW:controls().ToggleDesiredZone)
+      elseif newState == SCENE_HIDDEN then
+        KEYBIND_STRIP:RemoveKeybindButtonGroup(TITW:controls().ToggleDesiredZone)
+      end
+  end) -- end inner register callback
 end -- end function
 
 function TITW:Initialize()
-  TITW:addUI()
+  zo_callLater(self.BuildZoneNameCache, 1500)
+  zo_callLater(self.addUI, 1800)
 end
 
 --When Loaded
