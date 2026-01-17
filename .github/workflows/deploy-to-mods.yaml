@@ -1,0 +1,95 @@
+name:  Deploy Addon
+
+on:
+
+  push:
+    branches:
+    - main
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions: write-all
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: pip3 install pipx md2bbcode
+
+      - name: Get Next Version
+        id: semver
+        uses: ietf-tools/semver-action@v1
+        with:
+          token: ${{ github.token }}
+          branch: main
+          noVersionBumpBehavior: warn
+          skipInvalidTags: true
+          patchList: fix
+
+      - name: get repo name
+        run: echo "REPO_NAME=${{ github.event.repository.name }}" >> $GITHUB_ENV
+
+      - name: Create env variables
+        run: |
+          addon_name="${{ env.REPO_NAME }}"
+          version="${{ steps.semver.outputs.next }}"
+
+          echo "ADDON_NAME=$addon_name" >> $GITHUB_ENV
+          echo "ADDON_VERSION=$version" >> $GITHUB_ENV
+
+          echo "ZIP_FULL_NAME=${addon_name}-${version}.zip" >> $GITHUB_ENV
+      - name: Create addon file
+        run: |
+          cat ${{ github.workspace }}/${{ env.REPO_NAME }}/${{ env.REPO_NAME }}.addon.template | envsubst > ${{ github.workspace }}/${{ env.REPO_NAME }}/${{ env.REPO_NAME }}.addon
+          cat ${{ github.workspace }}/${{ env.REPO_NAME }}/${{ env.REPO_NAME }}.addon
+      - name: Create ZIP archive
+        run: |
+          REPO_FOLDER=${{ github.workspace }}/${{ env.ADDON_NAME }}
+          TMP_FOLDER="/tmp/${{ env.ADDON_NAME }}"
+
+          # Define the path to the ignore pattern file
+          ignore_file=".build-ignore"
+
+          # Read and process ignore patterns into a single line
+          exclude_patterns=$(cat "$ignore_file" | awk '{print "--exclude " $0}' | tr '\n' ' ')
+
+          # Make folder and copy content
+          mkdir -p $TMP_FOLDER
+          rsync -a --quiet $exclude_patterns "$REPO_FOLDER/" "$TMP_FOLDER/"
+          ls -la $TMP_FOLDER
+
+          # create zip
+          (cd /tmp && zip -r "$REPO_FOLDER/${{ env.ZIP_FULL_NAME }}" "${{ env.ADDON_NAME }}")
+
+      - name: Extract latest changelog entry
+        run: |
+          awk '/^## / { if (!found) { found=1; print; next } else { exit } } found' CHANGELOG.md > latest_changes.md
+          cat latest_changes.md
+
+      - name: Convert to bbcode for ESOUI
+        run: |
+          python3 -m pipx run md2bbcode README_ESOUI.bbcode > README_ESOUI.txt
+
+      - name: Create GitHub Release
+        #id: create_release
+        uses: ncipollo/release-action@v1
+        with:
+          name: "${{ env.ADDON_VERSION }}"
+          commit: ${{ github.ref }}
+          tag: "${{ env.ADDON_VERSION }}"
+          artifacts: "${{ github.workspace }}/${{ env.ADDON_NAME }}/${{ env.ZIP_FULL_NAME }}"
+          artifactContentType: application/zip
+          bodyFile: latest_changes.md
+          allowUpdates: true
+          makeLatest: true
+
+      - name: Upload to BNET
+        uses: m00nyONE/bnet-upload@main
+        with:
+          BNET_USERNAME: ${{ secrets.BNET_USERNAME }}
+          BNET_PASSWORD: ${{ secrets.BNET_PASSWORD }}
+          addon_id: ${{ vars.ADDON_ID }}
+          version: ${{ env.ADDON_VERSION }}
+          zip_file: "${{ github.workspace }}/${{ env.ADDON_NAME }}/${{ env.ZIP_FULL_NAME }}"
+          release_notes_file: latest_changes.md
