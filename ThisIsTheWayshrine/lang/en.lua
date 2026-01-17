@@ -6,6 +6,8 @@ TITW.Lang = {
   DISCOVERED_ALL                   =         "All wayshrines in zone discovered!  Nice going!",
   ZONE_ADDED                       =         "Adding zone to wayshrine discovery",
   ZONE_REMOVED                     =         "Removing zone from wayshrine discovery",
-  TOGGLE_ALL_ZONES                 =         "Toggle All Available Zones",
-  ALL_ZONES_TOGGLED                =         "All available zones toggled!"
+  TOGGLE_ALL_ZONES                 =         "Enable/Disable All Available Zones",
+  ALL_ZONES_TOGGLED                =         "All available zones",
+  ENABLED                          =         "enabled",
+  DISABLED                         =         "disabled",
 }
