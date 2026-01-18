@@ -1,6 +1,9 @@
 # ThisIsTheWayshrine
 Elder Scrolls Online Addon - Wayshrine Discovery and Quick Port Tool for Console (XBox/PS5)
 
+## Development status
+Alpha (unstable, use at your own risk)
+
 ## This is the Wayshrine - a Love Letter to PC Addon "BeamMeUp"
 Since 2018, [BeamMeUp](https://www.esoui.com/downloads/fileinfo.php?id=2143&so=DESC&page=69#info) has been saving PC players countless hours of toil of manually unlocking wayshrines and figuring out where to go for various Elder Scrolls Online objectives, thanks to the work of [DeadSoon](https://www.esoui.com/forums/member.php?action=getinfo&userid=43513) and [Gamer1986PAN](https://www.esoui.com/forums/member.php?action=getinfo&userid=20611)
 
