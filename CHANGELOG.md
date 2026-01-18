@@ -2,6 +2,7 @@
 - Increase frequency of jumping and failsafe in case of canceling travel
 - Add pull request template
 - Fix first time use
+- Clean up addon load
 
 ## 2026.01.17
 - Minimum features working

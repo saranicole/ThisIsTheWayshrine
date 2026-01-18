@@ -179,16 +179,16 @@ local function OnAddOnLoaded(eventCode, addonName)
   TITW.AV = ZO_SavedVars:NewAccountWide("ThisIsTheWayshrine_Vars", 1, nil, TITW.Default)
   TITW.CV = ZO_SavedVars:NewCharacterIdSettings("ThisIsTheWayshrine_Vars", 1, nil, TITW.Default)
   TITW.SwitchSV()
-  zo_callLater(TITW.BuildZoneNameCache, 1500)
-  zo_callLater(TITW.BuildMenu, 1800)
-  if TITW.SV.firstTimeLoad then
-    zo_callLater(function()
+  zo_callLater(function()
+    TITW.BuildZoneNameCache()
+    TITW.BuildMenu()
+    if TITW.SV.firstTimeLoad then
       TITW.toggleAvailableZones(true)
-    end,
-    2000)
-    zo_callLater(TITW.checkGuildMembersCurrentZoneAndJump, 2500)
-    TITW.SV.firstTimeLoad = false
-  else
+      TITW.SV.firstTimeLoad = false
+      TITW.checkGuildMembersCurrentZoneAndJump()
+    end
+  end, 1500)
+  if not TITW.SV.firstTimeLoad then
     TITW.checkGuildMembersCurrentZoneAndJump()
   end
 end
