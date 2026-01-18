@@ -10,7 +10,8 @@ TITW.Default = {
   CV = true,
   enabledZones = {},
   enableJumping = false,
-  announce = true
+  announce = true,
+  selectAll = true,
 }
 
 TITW.showing = false
@@ -20,7 +21,6 @@ TITW.zoneNameToId = {}
 TITW.zoneIds = {}
 TITW.controlList = {}
 TITW.toggle = false
-TITW.selectAll = false
 TITW.alreadyJumpedTo = {}
 TITW.memberIndex = 1
 TITW.guildIndex = 1
