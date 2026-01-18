@@ -53,16 +53,14 @@ function TITW.BuildMenu()
       return TITW.SV.selectAll
     end,
     setFunction = function(var)
-      if var then
-        for i, data in pairs(GAMEPAD_WORLD_MAP_LOCATIONS.data.mapData) do
-          local location = data.locationName
-          local zoneI = TITW:GetZoneIdFromZoneName(location)
-          if zoneI and ZONE_STORIES_GAMEPAD.IsZoneCollectibleUnlocked(zoneI) and zoneI ~= 181 then
-            if TITW.SV.enabledZones[zoneI] == nil then
-              TITW.SV.enabledZones[zoneI] = TITW:enumerateWayshrines(nil, zoneI)
-            end
-            TITW.SV.enabledZones[zoneI].enabled = var
+      for i, data in pairs(GAMEPAD_WORLD_MAP_LOCATIONS.data.mapData) do
+        local location = data.locationName
+        local zoneI = TITW:GetZoneIdFromZoneName(location)
+        if zoneI and ZONE_STORIES_GAMEPAD.IsZoneCollectibleUnlocked(zoneI) and zoneI ~= 181 then
+          if TITW.SV.enabledZones[zoneI] == nil then
+            TITW.SV.enabledZones[zoneI] = TITW:enumerateWayshrines(nil, zoneI)
           end
+          TITW.SV.enabledZones[zoneI].enabled = var
         end
       end
       TITW.SV.selectAll = var
