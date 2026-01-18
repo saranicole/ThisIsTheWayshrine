@@ -102,11 +102,10 @@ local function isZoneEnabled(table, element)
   return false
 end
 
-function TITW:triggerJump(displayName, zoneId, memberIndex, guildIndex)
+function TITW:triggerJump(displayName, zoneId, memberIndex)
   JumpToGuildMember(displayName)
   TITW.alreadyJumpedTo[displayName] = zoneId
   TITW.memberIndex = memberIndex
-  TITW.guildIndex = guildIndex
 end
 
 local function validateTravel(zoneId)
@@ -121,34 +120,29 @@ local function validateTravel(zoneId)
 end
 
 function TITW.checkGuildMembersCurrentZoneAndJump()
-  if TITW.enableJumping then
-    for guildIndex = TITW.guildIndex, GetNumGuilds() do
-      local guildId = GetGuildId(guildIndex)
+  if TITW.SV.enableJumping then
+      local guildId = GetGuildId(TITW.guildIndex)
       for memberIndex = TITW.memberIndex, GetNumGuildMembers(guildId) do
-          local displayName, _, _, status, _ = GetGuildMemberInfo(guildId, memberIndex)
-          local online = (status ~= PLAYER_STATUS_OFFLINE)
-          local _, _, _, _, _, _, _, zoneId = GetGuildMemberCharacterInfo(guildId, memberIndex)
+        local displayName, _, _, status, _ = GetGuildMemberInfo(guildId, memberIndex)
+        local online = (status ~= PLAYER_STATUS_OFFLINE)
+        local _, _, _, _, _, _, _, zoneId = GetGuildMemberCharacterInfo(guildId, memberIndex)
 
-          -- Online check
-          if online and displayName ~= GetDisplayName() and TITW.alreadyJumpedTo[displayName] ~= zoneId then
+        -- Online check
+        if online and displayName ~= GetDisplayName() and TITW.alreadyJumpedTo[displayName] ~= zoneId then
 
-              local okToTravel = validateTravel(zoneId)
-              if okToTravel then
-                d("considering "..displayName.." in "..GetZoneNameById(zoneId))
-              end
-              if okToTravel then
-                if not TITW.SV.promptToJump then
-                  TITW:triggerJump(displayName, zoneId, memberIndex, guildIndex)
-                  break
-                else
-                  ZO_Dialogs_ShowPlatformDialog("TITW_CONFIRM_JUMP", { PLAYERNAME = displayName, ZONEID = zoneId, MEMBERINDEX = memberIndex, GUILDINDEX = guildIndex }, {mainTextParams = { PLAYERNAME, ZONEID, MEMBERINDEX, GUILDINDEX }})
-                end
-              end
-          end
+            local okToTravel = validateTravel(zoneId)
+            if okToTravel then
+              d("Guild: "..GetGuildName(guildId)..", traveling to "..displayName.." in "..GetZoneNameById(zoneId))
+              TITW:triggerJump(displayName, zoneId, memberIndex)
+              break
+            end
         end
       end
       TITW.memberIndex = 1
-      TITW.guildIndex = 1
+      TITW.guildIndex = TITW.guildIndex + 1
+      if TITW.guildIndex > GetNumGuilds() then
+        TITW.guildIndex = 1
+      end
     end
     zo_callLater(TITW.checkGuildMembersCurrentZoneAndJump, 45000) -- 2.5 minutes
 end

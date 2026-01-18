@@ -22,6 +22,9 @@ function TITW.BuildMenu()
     end,
     setFunction = function(var)
       TITW.SV.enableJumping = var
+      if var then
+        TITW.checkGuildMembersCurrentZoneAndJump()
+      end
     end,
     default = TITW.SV.enableJumping
   }
