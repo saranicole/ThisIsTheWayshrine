@@ -7,6 +7,7 @@
 - Use register update
 - Tune register update frequency
 - Use a hybrid update and recursive approach
+- Move call later checkAndJump out of conditional
 
 ## 2026.01.17
 - Minimum features working
