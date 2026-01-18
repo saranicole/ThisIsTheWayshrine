@@ -14,9 +14,6 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: pip3 install pipx md2bbcode
-
       - name: Get Next Version
         id: semver
         uses: ietf-tools/semver-action@v1
@@ -66,10 +63,6 @@ jobs:
         run: |
           awk '/^## / { if (!found) { found=1; print; next } else { exit } } found' CHANGELOG.md > latest_changes.md
           cat latest_changes.md
-
-      - name: Convert to bbcode for ESOUI
-        run: |
-          python3 -m pipx run md2bbcode README_ESOUI.bbcode > README_ESOUI.txt
 
       - name: Create GitHub Release
         #id: create_release
