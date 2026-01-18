@@ -25,6 +25,7 @@ TITW.toggle = false
 TITW.alreadyJumpedTo = {}
 TITW.memberIndex = 1
 TITW.guildIndex = 1
+TITW.isTeleporting = false
 
 local function setupNoop()
   return
@@ -121,6 +122,7 @@ function TITW:triggerJump(displayName, zoneId, memberIndex)
   JumpToGuildMember(displayName)
   TITW.alreadyJumpedTo[displayName] = zoneId
   TITW.memberIndex = memberIndex
+  TITW.isTeleporting = true
 end
 
 local function validateTravel(zoneId)
@@ -131,7 +133,8 @@ local function validateTravel(zoneId)
     not TITW:GetZoneFullyDiscovered(zoneId) and
     CanJumpToPlayerInZone(zoneId) and
     TITW.SV.enabledZones[zoneId] ~= nil and
-    TITW.SV.enabledZones[zoneId].enabled
+    TITW.SV.enabledZones[zoneId].enabled and
+    not TITW.isTeleporting
 end
 
 function TITW.checkGuildMembersCurrentZoneAndJump()
@@ -148,7 +151,7 @@ function TITW.checkGuildMembersCurrentZoneAndJump()
             local okToTravel = validateTravel(zoneId)
             if okToTravel then
               if TITW.SV.announce then
-                d(TITW.Lang.GUILD_NAME..": "..GetGuildName(guildId)..", "..TITW.Lang.TRAVELING_TO.." "..displayName.." "..TITW.Lang.IN.." "..GetZoneNameById(zoneId))
+                d(TITW.Lang.GUILD_NAME.." "..TITW.guildIndex..": "..GetGuildName(guildId)..", "..TITW.Lang.TRAVELING_TO.." "..displayName.." "..TITW.Lang.IN.." "..GetZoneNameById(zoneId))
               end
               TITW:triggerJump(displayName, zoneId, memberIndex)
               break
@@ -159,9 +162,12 @@ function TITW.checkGuildMembersCurrentZoneAndJump()
       TITW.guildIndex = TITW.guildIndex + 1
       if TITW.guildIndex > GetNumGuilds() then
         TITW.guildIndex = 1
+        zo_callLater(function()
+          TITW.isTeleporting = false
+          TITW.checkGuildMembersCurrentZoneAndJump()
+        end, 30000)
       end
     end
-    zo_callLater(TITW.checkGuildMembersCurrentZoneAndJump, 45000) -- 2.5 minutes
 end
 
 --When Loaded
@@ -187,3 +193,8 @@ end
 
 -- Start Here
 EVENT_MANAGER:RegisterForEvent(TITW.Name, EVENT_ADD_ON_LOADED, OnAddOnLoaded)
+EVENT_MANAGER:RegisterForEvent("TITW_PlayerActivated", EVENT_PLAYER_ACTIVATED, function()
+        TITW.isTeleporting = false
+        TITW.checkGuildMembersCurrentZoneAndJump()
+    end
+)
