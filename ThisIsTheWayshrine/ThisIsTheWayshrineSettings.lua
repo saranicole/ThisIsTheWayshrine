@@ -50,7 +50,7 @@ function TITW.BuildMenu()
     type = LAM.ST_CHECKBOX,
     label = TITW.Lang.TOGGLE_ALL_ZONES,
     getFunction = function()
-      return TITW.selectAll
+      return TITW.SV.selectAll
     end,
     setFunction = function(var)
       for i, data in pairs(GAMEPAD_WORLD_MAP_LOCATIONS.data.mapData) do
@@ -63,9 +63,9 @@ function TITW.BuildMenu()
           TITW.SV.enabledZones[zoneI].enabled = var
         end
       end
-      TITW.selectAll = var
+      TITW.SV.selectAll = var
     end,
-    default = TITW.selectAll
+    default = TITW.SV.selectAll
   }
 
   for i, data in pairs(GAMEPAD_WORLD_MAP_LOCATIONS.data.mapData) do
