@@ -164,7 +164,6 @@ function TITW.checkGuildMembersCurrentZoneAndJump()
         TITW.guildIndex = 1
         zo_callLater(function()
           TITW.isTeleporting = false
-          TITW.checkGuildMembersCurrentZoneAndJump()
         end, 30000)
       end
     end
@@ -179,18 +178,14 @@ local function OnAddOnLoaded(eventCode, addonName)
   TITW.AV = ZO_SavedVars:NewAccountWide("ThisIsTheWayshrine_Vars", 1, nil, TITW.Default)
   TITW.CV = ZO_SavedVars:NewCharacterIdSettings("ThisIsTheWayshrine_Vars", 1, nil, TITW.Default)
   TITW.SwitchSV()
+  TITW.BuildZoneNameCache()
   zo_callLater(function()
-    TITW.BuildZoneNameCache()
     TITW.BuildMenu()
     if TITW.SV.firstTimeLoad then
       TITW.toggleAvailableZones(true)
       TITW.SV.firstTimeLoad = false
-      zo_callLater(TITW.checkGuildMembersCurrentZoneAndJump, 1000)
     end
   end, 1500)
-  if not TITW.SV.firstTimeLoad then
-    TITW.checkGuildMembersCurrentZoneAndJump()
-  end
 end
 
 -- Start Here
