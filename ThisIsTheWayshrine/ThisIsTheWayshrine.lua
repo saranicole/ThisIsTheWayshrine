@@ -165,11 +165,11 @@ function TITW.checkGuildMembersCurrentZoneAndJump()
       TITW.guildIndex = TITW.guildIndex + 1
       if TITW.guildIndex > GetNumGuilds() then
         TITW.guildIndex = 1
-        zo_callLater(function()
-          TITW.isTeleporting = false
-          TITW.checkGuildMembersCurrentZoneAndJump()
-        end, 30000)
       end
+      zo_callLater(function()
+        TITW.isTeleporting = false
+        TITW.checkGuildMembersCurrentZoneAndJump()
+      end, 20000)
     end
 end
 
