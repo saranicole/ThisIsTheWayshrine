@@ -24,9 +24,6 @@ function TITW.BuildMenu()
       TITW.SV.enableJumping = var
       if var then
         TITW.checkGuildMembersCurrentZoneAndJump()
-        EVENT_MANAGER:RegisterForUpdate("TITW_CheckAndJump", 15000, TITW.checkGuildMembersCurrentZoneAndJump)
-      else
-        EVENT_MANAGER:UnregisterForUpdate("TITW_CheckAndJump")
       end
     end,
     default = TITW.SV.enableJumping
