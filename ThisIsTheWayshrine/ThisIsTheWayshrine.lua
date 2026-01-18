@@ -9,7 +9,7 @@ TITW.Name = "ThisIsTheWayshrine"
 TITW.Default = {
   CV = true,
   enabledZones = {},
-  promptToJump = false,
+  enableJumping = false,
 }
 
 TITW.showing = false
@@ -109,43 +109,6 @@ function TITW:triggerJump(displayName, zoneId, memberIndex, guildIndex)
   TITW.guildIndex = guildIndex
 end
 
-function TITW:RegisterPrompt()
-  ZO_Dialogs_RegisterCustomDialog(
-        "TITW_CONFIRM_JUMP",
-        {
-            gamepadInfo =
-            {
-                dialogType = GAMEPAD_DIALOGS.BASIC,
-            },
-            title =
-            {
-                text = TITW.Lang.JUMP_PROMPT_TITLE,
-            },
-            mainText =
-            {
-                text = TITW.Lang.JUMP_PROMPT_TEXT,
-            },
-            buttons =
-            {
-                [1] =
-                {
-                    text = SI_DIALOG_YES,
-                    callback =  function(dialog)
-                        TITW:triggerJump(dialog.data.PLAYERNAME, dialog.data.ZONEID, dialog.data.MEMBERINDEX, dialog.data.GUILDINDEX)
-                    end,
-                },
-
-                [2] =
-                {
-                    text = SI_DIALOG_NO,
-                }
-            }
-        }
-    )
-
-end
-
-
 local function validateTravel(zoneId)
   return not IsUnitInCombat("player") and
     zoneId ~= 181 and
@@ -158,40 +121,41 @@ local function validateTravel(zoneId)
 end
 
 function TITW.checkGuildMembersCurrentZoneAndJump()
-  for guildIndex = TITW.guildIndex, GetNumGuilds() do
-    local guildId = GetGuildId(guildIndex)
-    for memberIndex = TITW.memberIndex, GetNumGuildMembers(guildId) do
-        local displayName, _, _, status, _ = GetGuildMemberInfo(guildId, memberIndex)
-        local online = (status ~= PLAYER_STATUS_OFFLINE)
-        local _, _, _, _, _, _, _, zoneId = GetGuildMemberCharacterInfo(guildId, memberIndex)
+  if TITW.enableJumping then
+    for guildIndex = TITW.guildIndex, GetNumGuilds() do
+      local guildId = GetGuildId(guildIndex)
+      for memberIndex = TITW.memberIndex, GetNumGuildMembers(guildId) do
+          local displayName, _, _, status, _ = GetGuildMemberInfo(guildId, memberIndex)
+          local online = (status ~= PLAYER_STATUS_OFFLINE)
+          local _, _, _, _, _, _, _, zoneId = GetGuildMemberCharacterInfo(guildId, memberIndex)
 
-        -- Online check
-        if online and displayName ~= GetDisplayName() and TITW.alreadyJumpedTo[displayName] ~= zoneId then
+          -- Online check
+          if online and displayName ~= GetDisplayName() and TITW.alreadyJumpedTo[displayName] ~= zoneId then
 
-            local okToTravel = validateTravel(zoneId)
-            if okToTravel then
-              d("considering "..displayName.." in "..GetZoneNameById(zoneId))
-            end
-            if okToTravel then
-              if not TITW.SV.promptToJump then
-                TITW:triggerJump(displayName, zoneId, memberIndex, guildIndex)
-                break
-              else
-                ZO_Dialogs_ShowPlatformDialog("TITW_CONFIRM_JUMP", { PLAYERNAME = displayName, ZONEID = zoneId, MEMBERINDEX = memberIndex, GUILDINDEX = guildIndex }, {mainTextParams = { PLAYERNAME, ZONEID, MEMBERINDEX, GUILDINDEX }})
+              local okToTravel = validateTravel(zoneId)
+              if okToTravel then
+                d("considering "..displayName.." in "..GetZoneNameById(zoneId))
               end
-            end
+              if okToTravel then
+                if not TITW.SV.promptToJump then
+                  TITW:triggerJump(displayName, zoneId, memberIndex, guildIndex)
+                  break
+                else
+                  ZO_Dialogs_ShowPlatformDialog("TITW_CONFIRM_JUMP", { PLAYERNAME = displayName, ZONEID = zoneId, MEMBERINDEX = memberIndex, GUILDINDEX = guildIndex }, {mainTextParams = { PLAYERNAME, ZONEID, MEMBERINDEX, GUILDINDEX }})
+                end
+              end
+          end
         end
       end
+      TITW.memberIndex = 1
+      TITW.guildIndex = 1
     end
-    TITW.memberIndex = 1
-    TITW.guildIndex = 1
     zo_callLater(TITW.checkGuildMembersCurrentZoneAndJump, 45000) -- 2.5 minutes
 end
 
 function TITW:Initialize()
   zo_callLater(self.BuildZoneNameCache, 1500)
   zo_callLater(self.BuildMenu, 1800)
-  TITW:RegisterPrompt()
   TITW.checkGuildMembersCurrentZoneAndJump()
 end
 

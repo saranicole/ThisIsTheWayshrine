@@ -16,14 +16,14 @@ function TITW.BuildMenu()
 
   panel:AddSetting {
     type = LAM.ST_CHECKBOX,
-    label = TITW.Lang.PROMPT_TO_JUMP,
+    label = TITW.Lang.ENABLE_JUMPING,
     getFunction = function()
-      return TITW.SV.promptToJump
+      return TITW.SV.enableJumping
     end,
     setFunction = function(var)
-      TITW.SV.promptToJump = var
+      TITW.SV.enableJumping = var
     end,
-    default = TITW.SV.promptToJump
+    default = TITW.SV.enableJumping
   }
 
   panel:AddSetting {
