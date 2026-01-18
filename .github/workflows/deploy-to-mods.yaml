@@ -23,7 +23,6 @@ jobs:
           noVersionBumpBehavior: warn
           skipInvalidTags: true
           patchList: fix
-          prefix: v
 
       - name: get repo name
         run: echo "REPO_NAME=${{ github.event.repository.name }}" >> $GITHUB_ENV
