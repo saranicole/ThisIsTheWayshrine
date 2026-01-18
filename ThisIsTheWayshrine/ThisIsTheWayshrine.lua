@@ -9,7 +9,7 @@ TITW.Name = "ThisIsTheWayshrine"
 TITW.Default = {
   CV = true,
   enabledZones = {},
-  promptToJump = {},
+  promptToJump = false,
 }
 
 TITW.showing = false
@@ -20,6 +20,9 @@ TITW.zoneIds = {}
 TITW.controlList = {}
 TITW.toggle = false
 TITW.selectAll = false
+TITW.alreadyJumpedTo = {}
+TITW.memberIndex = 1
+TITW.guildIndex = 1
 
 local function setupNoop()
   return
@@ -46,8 +49,11 @@ function TITW:GetZoneIdFromZoneName(targetName)
 end
 
 function TITW:GetZoneFullyDiscovered(zoneId)
-  local zone = TWIW.SV.enabledZones[zoneId]
-  return zone[knownWayshrines] == 2 ^ zone[totalWayshrines]
+  local zone = TITW.SV.enabledZones[zoneId]
+  if zone and zone[totalWayshrines] and zone[knownWayshrines] then
+    return zone[knownWayshrines] == 2 ^ zone[totalWayshrines]
+  end
+  return false
 end
 
 function TITW:enumerateWayshrines(zoneIdex, providedZoneId)
@@ -96,6 +102,13 @@ local function isZoneEnabled(table, element)
   return false
 end
 
+function TITW:triggerJump(displayName, zoneId, memberIndex, guildIndex)
+  JumpToGuildMember(displayName)
+  TITW.alreadyJumpedTo[displayName] = zoneId
+  TITW.memberIndex = memberIndex
+  TITW.guildIndex = guildIndex
+end
+
 function TITW:RegisterPrompt()
   ZO_Dialogs_RegisterCustomDialog(
         "TITW_CONFIRM_JUMP",
@@ -118,7 +131,7 @@ function TITW:RegisterPrompt()
                 {
                     text = SI_DIALOG_YES,
                     callback =  function(dialog)
-                        JumpToGuildMember(dialog.data.PLAYERNAME)
+                        TITW:triggerJump(dialog.data.PLAYERNAME, dialog.data.ZONEID, dialog.data.MEMBERINDEX, dialog.data.GUILDINDEX)
                     end,
                 },
 
@@ -132,11 +145,54 @@ function TITW:RegisterPrompt()
 
 end
 
+
+local function validateTravel(zoneId)
+  return not IsUnitInCombat("player") and
+    zoneId ~= 181 and
+    not IsUnitDead("player") and
+    ZONE_STORIES_GAMEPAD.IsZoneCollectibleUnlocked(zoneId) and
+    not TITW:GetZoneFullyDiscovered(zoneId) and
+    CanJumpToPlayerInZone(zoneId) and
+    TITW.SV.enabledZones[zoneId] ~= nil and
+    TITW.SV.enabledZones[zoneId].enabled
+end
+
+function TITW.checkGuildMembersCurrentZoneAndJump()
+  for guildIndex = TITW.guildIndex, GetNumGuilds() do
+    local guildId = GetGuildId(guildIndex)
+    for memberIndex = TITW.memberIndex, GetNumGuildMembers(guildId) do
+        local displayName, _, _, status, _ = GetGuildMemberInfo(guildId, memberIndex)
+        local online = (status ~= PLAYER_STATUS_OFFLINE)
+        local _, _, _, _, _, _, _, zoneId = GetGuildMemberCharacterInfo(guildId, memberIndex)
+
+        -- Online check
+        if online and displayName ~= GetDisplayName() and TITW.alreadyJumpedTo[displayName] ~= zoneId then
+
+            local okToTravel = validateTravel(zoneId)
+            if okToTravel then
+              d("considering "..displayName.." in "..GetZoneNameById(zoneId))
+            end
+            if okToTravel then
+              if not TITW.SV.promptToJump then
+                TITW:triggerJump(displayName, zoneId, memberIndex, guildIndex)
+                break
+              else
+                ZO_Dialogs_ShowPlatformDialog("TITW_CONFIRM_JUMP", { PLAYERNAME = displayName, ZONEID = zoneId, MEMBERINDEX = memberIndex, GUILDINDEX = guildIndex }, {mainTextParams = { PLAYERNAME, ZONEID, MEMBERINDEX, GUILDINDEX }})
+              end
+            end
+        end
+      end
+    end
+    TITW.memberIndex = 1
+    TITW.guildIndex = 1
+    zo_callLater(TITW.checkGuildMembersCurrentZoneAndJump, 45000) -- 2.5 minutes
+end
+
 function TITW:Initialize()
   zo_callLater(self.BuildZoneNameCache, 1500)
   zo_callLater(self.BuildMenu, 1800)
   TITW:RegisterPrompt()
-  TITW:checkGuildMembersCurrentZone()
+  TITW.checkGuildMembersCurrentZoneAndJump()
 end
 
 --When Loaded
@@ -152,67 +208,5 @@ local function OnAddOnLoaded(eventCode, addonName)
 
 end
 
-
-local function validateTravel(zoneId)
-  return not IsUnitInCombat("player") and
-    not IsUnitDead("player") and
-    ZONE_STORIES_GAMEPAD.IsZoneCollectibleUnlocked(zoneId) and
-    not TITW:GetZoneFullyDiscovered(zoneId) and
-    CanJumpToPlayerInZone(zoneId) and
-    TITW.SV.enabledZones[zoneId].enabled
-end
-
-function TITW:checkGuildMembersCurrentZone()
-  for guildIndex = 1, GetNumGuilds() do
-    local guildId = GetGuildId(guildIndex)
-
-    for memberIndex = 1, GetNumGuildMembers(guildId) do
-        local displayName, _, _, status, _ = GetGuildMemberInfo(guildId, memberIndex)
-        local online = (status ~= PLAYER_STATUS_OFFLINE)
-        local _, _, zone = GetGuildMemberCharacterInfo(guildId, memberIndex)
-
-        -- Online check
-        if online then
-            local zoneName = GetGuildMemberCharacterZone(guildId, memberIndex)
-            d(zoneName)
-            local zoneId = TITW:GetZoneIdFromZoneName(zoneName)
-            okToTravel = validateTravel(zoneId)
-            d(okToTravel)
-            if not TITW.SV.promptToJump then
-              JumpToGuildMember(displayName)
-            else
-              ZO_Dialogs_ReleaseDialog("TITW_CONFIRM_JUMP")
-              ZO_Dialogs_ShowPlatformDialog("TITW_CONFIRM_JUMP", { PLAYERNAME = displayName }, {mainTextParams = { PLAYERNAME }})
-            end
-        end
-      end
-    end
-end
-
-local function TITW_Event_Player_Activated(event, isA)
-	EVENT_MANAGER:UnregisterForEvent("TITW_PLAYER_ACTIVATED", EVENT_PLAYER_ACTIVATED)
-	local currentZoneIndex = GetUnitZoneIndex("player")
-	if TITW.SV.enabledZones[currentZoneIndex] and next(TITW.SV.enabledZones[currentZoneIndex]) and TITW.SV.enabledZones[currentZoneIndex][knownWayshrines] then
-    local prevWayshrines = TITW.SV.enabledZones[currentZoneIndex][knownWayshrines]
-    local currentWayshrineStats = TITW:enumerateWayshrines(currentZoneIndex)
-    if currentWayshrineStats[knownWayshrines] > prevWayshrines then
-      d(TITW.Lang.DISCOVERED_NEW)
-    end
-    if currentWayshrineStats[knownWayshrines] == 2 ^ currentWayshrineStats[totalWayshrines] then
-      d(TITW.Lang.DISCOVERED_ALL)
-    end
-	end
-end
-
-local function TITW_Event_Social_Jump_Activated(event, isA)
-  d(event.zoneId)
-  if isZoneEnabled(TITW.SV.enabledZones, event.zoneId) then
-    d("Would travel to zone "..event.zoneId)
-    d(GetZoneNameById(event.zoneId))
-  end
-end
-
 -- Start Here
 EVENT_MANAGER:RegisterForEvent(TITW.Name, EVENT_ADD_ON_LOADED, OnAddOnLoaded)
-EVENT_MANAGER:RegisterForEvent("TITW_PLAYER_ACTIVATED", EVENT_PLAYER_ACTIVATED, TITW_Event_Player_Activated)
-EVENT_MANAGER:RegisterForEvent("TITW_GUILDEE_JUMPED", EVENT_GUILD_MEMBER_ZONE_CHANGED, TITW_Event_Social_Jump_Activated)

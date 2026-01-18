@@ -23,7 +23,7 @@ function TITW.BuildMenu()
     setFunction = function(var)
       TITW.SV.promptToJump = var
     end,
-    default = TITW.promptToJump
+    default = TITW.SV.promptToJump
   }
 
   panel:AddSetting {
@@ -41,7 +41,7 @@ function TITW.BuildMenu()
       for i, data in pairs(GAMEPAD_WORLD_MAP_LOCATIONS.data.mapData) do
         local location = data.locationName
         local zoneI = TITW:GetZoneIdFromZoneName(location)
-        if zoneI and ZONE_STORIES_GAMEPAD.IsZoneCollectibleUnlocked(zoneI) then
+        if zoneI and ZONE_STORIES_GAMEPAD.IsZoneCollectibleUnlocked(zoneI) and zoneI ~= 181 then
           if TITW.SV.enabledZones[zoneI] == nil then
              TITW.SV.enabledZones[zoneI] = TITW:enumerateWayshrines(nil, zoneI)
           end
