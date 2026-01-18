@@ -11,4 +11,8 @@ TITW.Lang = {
   ENABLED                          =         "enabled",
   DISABLED                         =         "disabled",
   ENABLE_JUMPING                   =         "Enable wayshrine discovery travel",
+  ANNOUNCE                         =         "Announce travel destinations",
+  GUILD_NAME                       =         "Guild",
+  TRAVELING_TO                     =         "traveling to",
+  IN                               =         "in"
 }

@@ -30,6 +30,18 @@ function TITW.BuildMenu()
   }
 
   panel:AddSetting {
+    type = LAM.ST_CHECKBOX,
+    label = TITW.Lang.ANNOUNCE,
+    getFunction = function()
+      return TITW.SV.announce
+    end,
+    setFunction = function(var)
+      TITW.SV.announce = var
+    end,
+    default = TITW.SV.announce
+  }
+
+  panel:AddSetting {
     type = LAM.ST_SECTION,
     label = TITW.Lang.TOGGLE_ZONE_DISCOVERY,
   }

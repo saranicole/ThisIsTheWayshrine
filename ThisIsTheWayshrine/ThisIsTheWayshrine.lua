@@ -10,6 +10,7 @@ TITW.Default = {
   CV = true,
   enabledZones = {},
   enableJumping = false,
+  announce = true
 }
 
 TITW.showing = false
@@ -132,7 +133,9 @@ function TITW.checkGuildMembersCurrentZoneAndJump()
 
             local okToTravel = validateTravel(zoneId)
             if okToTravel then
-              d("Guild: "..GetGuildName(guildId)..", traveling to "..displayName.." in "..GetZoneNameById(zoneId))
+              if TITW.SV.announce then
+                d(TITW.Lang.GUILD_NAME..": "..GetGuildName(guildId)..", "..TITW.Lang.TRAVELING_TO.." "..displayName.." "..TITW.Lang.IN.." "..GetZoneNameById(zoneId))
+              end
               TITW:triggerJump(displayName, zoneId, memberIndex)
               break
             end
