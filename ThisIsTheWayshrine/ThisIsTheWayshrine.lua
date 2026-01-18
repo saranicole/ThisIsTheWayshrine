@@ -184,11 +184,14 @@ local function OnAddOnLoaded(eventCode, addonName)
   if TITW.SV.firstTimeLoad then
     zo_callLater(function()
       TITW.toggleAvailableZones(true)
+      TITW.checkGuildMembersCurrentZoneAndJump()
     end,
     2000)
     TITW.SV.firstTimeLoad = false
+  else
+    TITW.checkGuildMembersCurrentZoneAndJump()
   end
-  TITW.checkGuildMembersCurrentZoneAndJump()
+
 end
 
 -- Start Here
