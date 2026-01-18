@@ -3,6 +3,7 @@
 - Add pull request template
 - Fix first time use
 - Clean up addon load
+- Attempt delaying the initial jump on first time use
 
 ## 2026.01.17
 - Minimum features working
