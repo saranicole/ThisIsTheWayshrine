@@ -1,0 +1,95 @@
+local TITW = ThisIsTheWayshrine
+
+local LAM = LibHarvensAddonSettings
+
+if not LibHarvensAddonSettings then
+    d("LibHarvensAddonSettings is required!")
+    return
+end
+
+function TITW.BuildMenu()
+
+  local panel = LAM:AddAddon(TITW.Name, {
+    allowDefaults = false,  -- Show "Reset to Defaults" button
+    allowRefresh = true    -- Enable automatic control updates
+  })
+
+  panel:AddSetting {
+    type = LAM.ST_CHECKBOX,
+    label = TITW.Lang.ENABLE_JUMPING,
+    getFunction = function()
+      return TITW.SV.enableJumping
+    end,
+    setFunction = function(var)
+      TITW.SV.enableJumping = var
+      if var then
+        TITW.checkGuildMembersCurrentZoneAndJump()
+      end
+    end,
+    default = TITW.SV.enableJumping
+  }
+
+  panel:AddSetting {
+    type = LAM.ST_CHECKBOX,
+    label = TITW.Lang.ANNOUNCE,
+    getFunction = function()
+      return TITW.SV.announce
+    end,
+    setFunction = function(var)
+      TITW.SV.announce = var
+    end,
+    default = TITW.SV.announce
+  }
+
+  panel:AddSetting {
+    type = LAM.ST_SECTION,
+    label = TITW.Lang.TOGGLE_ZONE_DISCOVERY,
+  }
+
+  panel:AddSetting {
+    type = LAM.ST_CHECKBOX,
+    label = TITW.Lang.TOGGLE_ALL_ZONES,
+    getFunction = function()
+      return TITW.selectAll
+    end,
+    setFunction = function(var)
+      for i, data in pairs(GAMEPAD_WORLD_MAP_LOCATIONS.data.mapData) do
+        local location = data.locationName
+        local zoneI = TITW:GetZoneIdFromZoneName(location)
+        if zoneI and ZONE_STORIES_GAMEPAD.IsZoneCollectibleUnlocked(zoneI) and zoneI ~= 181 then
+          if TITW.SV.enabledZones[zoneI] == nil then
+             TITW.SV.enabledZones[zoneI] = TITW:enumerateWayshrines(nil, zoneI)
+          end
+          TITW.SV.enabledZones[zoneI].enabled = var
+        end
+      end
+      TITW.selectAll = var
+    end,
+    default = TITW.selectAll
+  }
+
+  for i, data in pairs(GAMEPAD_WORLD_MAP_LOCATIONS.data.mapData) do
+    local locationName = data.locationName
+    local zoneId = TITW:GetZoneIdFromZoneName(locationName)
+    panel:AddSetting {
+      type = LAM.ST_CHECKBOX,
+      label = data.locationName,
+      getFunction = function()
+        if TITW.SV.enabledZones[zoneId] then
+          return TITW.SV.enabledZones[zoneId].enabled
+        end
+        return false
+      end,
+      setFunction = function(var)
+        if TITW.SV.enabledZones[zoneId] == nil then
+           TITW.SV.enabledZones[zoneId] = TITW:enumerateWayshrines(nil, zoneId)
+        end
+        TITW.SV.enabledZones[zoneId].enabled = var
+      end,
+      default = false,
+      disable = function()
+        return not ZONE_STORIES_GAMEPAD.IsZoneCollectibleUnlocked(zoneId) and not TITW:GetZoneFullyDiscovered(zoneId)
+      end
+    }
+  end
+end
