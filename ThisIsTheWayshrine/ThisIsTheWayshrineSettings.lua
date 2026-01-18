@@ -53,16 +53,7 @@ function TITW.BuildMenu()
       return TITW.SV.selectAll
     end,
     setFunction = function(var)
-      for i, data in pairs(GAMEPAD_WORLD_MAP_LOCATIONS.data.mapData) do
-        local location = data.locationName
-        local zoneI = TITW:GetZoneIdFromZoneName(location)
-        if zoneI and ZONE_STORIES_GAMEPAD.IsZoneCollectibleUnlocked(zoneI) and zoneI ~= 181 then
-          if TITW.SV.enabledZones[zoneI] == nil then
-            TITW.SV.enabledZones[zoneI] = TITW:enumerateWayshrines(nil, zoneI)
-          end
-          TITW.SV.enabledZones[zoneI].enabled = var
-        end
-      end
+      TITW.toggleAvailableZones(var)
       TITW.SV.selectAll = var
     end,
     default = TITW.SV.selectAll
@@ -75,10 +66,10 @@ function TITW.BuildMenu()
       type = LAM.ST_CHECKBOX,
       label = data.locationName,
       getFunction = function()
-        if TITW.SV.enabledZones[zoneId] then
+        if TITW.SV.enabledZones[zoneId] ~= nil then
           return TITW.SV.enabledZones[zoneId].enabled
         end
-        return false
+        return TITW.SV.selectAll
       end,
       setFunction = function(var)
         if TITW.SV.enabledZones[zoneId] == nil then
@@ -86,7 +77,7 @@ function TITW.BuildMenu()
         end
         TITW.SV.enabledZones[zoneId].enabled = var
       end,
-      default = false,
+      default = TITW.SV.selectAll,
       disable = function()
         return not ZONE_STORIES_GAMEPAD.IsZoneCollectibleUnlocked(zoneId) and not TITW:GetZoneFullyDiscovered(zoneId)
       end

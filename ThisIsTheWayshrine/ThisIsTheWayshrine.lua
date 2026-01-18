@@ -12,6 +12,7 @@ TITW.Default = {
   enableJumping = false,
   announce = true,
   selectAll = true,
+  firstTimeLoad = true,
 }
 
 TITW.showing = false
@@ -103,6 +104,19 @@ local function isZoneEnabled(table, element)
   return false
 end
 
+function TITW.toggleAvailableZones(var)
+  for i, data in pairs(GAMEPAD_WORLD_MAP_LOCATIONS.data.mapData) do
+    local location = data.locationName
+    local zoneI = TITW:GetZoneIdFromZoneName(location)
+    if zoneI and ZONE_STORIES_GAMEPAD.IsZoneCollectibleUnlocked(zoneI) and zoneI ~= 181 then
+      if TITW.SV.enabledZones[zoneI] == nil then
+        TITW.SV.enabledZones[zoneI] = TITW:enumerateWayshrines(nil, zoneI)
+      end
+      TITW.SV.enabledZones[zoneI].enabled = var
+    end
+  end
+end
+
 function TITW:triggerJump(displayName, zoneId, memberIndex)
   JumpToGuildMember(displayName)
   TITW.alreadyJumpedTo[displayName] = zoneId
@@ -150,12 +164,6 @@ function TITW.checkGuildMembersCurrentZoneAndJump()
     zo_callLater(TITW.checkGuildMembersCurrentZoneAndJump, 45000) -- 2.5 minutes
 end
 
-function TITW:Initialize()
-  zo_callLater(self.BuildZoneNameCache, 1500)
-  zo_callLater(self.BuildMenu, 1800)
-  TITW.checkGuildMembersCurrentZoneAndJump()
-end
-
 --When Loaded
 local function OnAddOnLoaded(eventCode, addonName)
   if addonName ~= TITW.Name then return end
@@ -165,8 +173,13 @@ local function OnAddOnLoaded(eventCode, addonName)
   TITW.AV = ZO_SavedVars:NewAccountWide("ThisIsTheWayshrine_Vars", 1, nil, TITW.Default)
   TITW.CV = ZO_SavedVars:NewCharacterIdSettings("ThisIsTheWayshrine_Vars", 1, nil, TITW.Default)
   TITW.SwitchSV()
-  TITW:Initialize()
-
+  zo_callLater(TITW.BuildZoneNameCache, 1500)
+  zo_callLater(TITW.BuildMenu, 1800)
+  if TITW.SV.firstTimeLoad then
+    TITW.toggleAvailableZones(true)
+    TITW.SV.firstTimeLoad = false
+  end
+  TITW.checkGuildMembersCurrentZoneAndJump()
 end
 
 -- Start Here
