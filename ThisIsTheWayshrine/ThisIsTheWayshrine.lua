@@ -139,6 +139,9 @@ end
 
 function TITW.checkGuildMembersCurrentZoneAndJump()
   if TITW.SV.enableJumping then
+      if next(TITW.alreadyJumpedTo) ~= nil then
+        EVENT_MANAGER:UnregisterForUpdate("TITW_CheckAndJump")
+      end
       local guildId = GetGuildId(TITW.guildIndex)
       for memberIndex = TITW.memberIndex, GetNumGuildMembers(guildId) do
         local displayName, _, _, status, _ = GetGuildMemberInfo(guildId, memberIndex)
@@ -164,6 +167,7 @@ function TITW.checkGuildMembersCurrentZoneAndJump()
         TITW.guildIndex = 1
         zo_callLater(function()
           TITW.isTeleporting = false
+          TITW.checkGuildMembersCurrentZoneAndJump()
         end, 30000)
       end
     end
@@ -184,6 +188,7 @@ local function OnAddOnLoaded(eventCode, addonName)
     if TITW.SV.firstTimeLoad then
       TITW.toggleAvailableZones(true)
       TITW.SV.firstTimeLoad = false
+      EVENT_MANAGER:RegisterForUpdate("TITW_CheckAndJump", 10000, TITW.checkGuildMembersCurrentZoneAndJump)
     end
   end, 1500)
 end

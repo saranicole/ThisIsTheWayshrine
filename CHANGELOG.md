@@ -6,6 +6,7 @@
 - Attempt delaying the initial jump on first time use
 - Use register update
 - Tune register update frequency
+- Use a hybrid update and recursive approach
 
 ## 2026.01.17
 - Minimum features working
