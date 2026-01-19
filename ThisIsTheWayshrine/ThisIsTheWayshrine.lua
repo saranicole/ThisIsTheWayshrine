@@ -33,7 +33,7 @@ TITW.stalledCounter = 0
 TITW.waitToJumpDuration = 2500
 
 if IsConsoleUI() then
-  TITW.waitToJumpDuration = 8000
+  TITW.waitToJumpDuration = 10000
 end
 
 function TITW.BuildZoneNameCache()
