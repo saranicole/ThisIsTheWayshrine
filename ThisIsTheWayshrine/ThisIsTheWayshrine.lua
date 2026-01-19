@@ -181,7 +181,7 @@ function TITW.checkStalled()
     if TITW.prevJumps == TITW.numJumps then
       TITW.stalledCounter = TITW.stalledCounter + 1
     end
-    if TITW.stalledCounter > 2 then
+    if TITW.stalledCounter > 1 then
       TITW.isTeleporting = false
       TITW.checkGuildMembersCurrentZoneAndJump()
       TITW.stalledCounter = 0
