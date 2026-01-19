@@ -11,6 +11,7 @@
 - Introduce stalled check instead of calling recursively
 - Increase call later duration
 - Make wait dynamic
+- Remove social error handling
 
 ## 2026.01.17
 - Minimum features working
