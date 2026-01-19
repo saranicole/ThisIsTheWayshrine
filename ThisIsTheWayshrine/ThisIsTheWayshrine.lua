@@ -172,7 +172,7 @@ function TITW.checkGuildMembersCurrentZoneAndJump()
       end
       if not validJumpsAvailable then
         TITW.isTeleporting = false
-        TITW.checkGuildMembersCurrentZoneAndJump()
+        zo_callLater(TITW.checkGuildMembersCurrentZoneAndJump, 10000)
       end
       TITW.memberIndex = 1
       TITW.guildIndex = TITW.guildIndex + 1
