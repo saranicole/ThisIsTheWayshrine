@@ -28,10 +28,9 @@ TITW.guildIndex = 1
 TITW.isTeleporting = false
 TITW.errorJumpingTo = {}
 TITW.pause = false
-
-local function setupNoop()
-  return
-end
+TITW.prevJumps = 0
+TITW.numJumps = 0
+TITW.stalledCounter = 0
 
 function TITW.BuildZoneNameCache()
     ZO_ClearTable(TITW.zoneNameToId)
@@ -125,6 +124,7 @@ function TITW:triggerJump(displayName, zoneId, memberIndex)
   JumpToGuildMember(displayName)
   TITW.alreadyJumpedTo[displayName] = zoneId
   TITW.memberIndex = memberIndex
+  TITW.numJumps = TITW.numJumps + 1
 end
 
 local function validateTravel(zoneId)
@@ -138,7 +138,7 @@ local function validateTravel(zoneId)
     CanJumpToPlayerInZone(zoneId) and
     TITW.SV.enabledZones[zoneId] ~= nil and
     TITW.SV.enabledZones[zoneId].enabled and
-    not TITW.isTeleporting and
+    not TITW.isTeleporting
 end
 
 function TITW.checkGuildMembersCurrentZoneAndJump()
@@ -172,6 +172,20 @@ function TITW.checkGuildMembersCurrentZoneAndJump()
     end
 end
 
+function TITW.checkStalled()
+  if TITW.SV.enableJumping and not TITW.pause then
+    if TITW.prevJumps == TITW.numJumps then
+      TITW.stalledCounter = TITW.stalledCounter + 1
+    end
+    if TITW.stalledCounter > 2 then
+      TITW.isTeleporting = false
+      TITW.checkGuildMembersCurrentZoneAndJump()
+      TITW.stalledCounter = 0
+    end
+    TITW.prevJumps = TITW.numJumps
+  end
+end
+
 --When Loaded
 local function OnAddOnLoaded(eventCode, addonName)
   if addonName ~= TITW.Name then return end
@@ -189,6 +203,7 @@ local function OnAddOnLoaded(eventCode, addonName)
       TITW.SV.firstTimeLoad = false
       EVENT_MANAGER:RegisterForUpdate("TITW_CheckAndJump", 10000, TITW.checkGuildMembersCurrentZoneAndJump)
     end
+    EVENT_MANAGER:RegisterForUpdate("TITW_CheckStalled", 35000, TITW.checkStalled)
   end, 1500)
 end
 
@@ -196,7 +211,7 @@ end
 EVENT_MANAGER:RegisterForEvent(TITW.Name, EVENT_ADD_ON_LOADED, OnAddOnLoaded)
 EVENT_MANAGER:RegisterForEvent("TITW_PlayerActivated", EVENT_PLAYER_ACTIVATED, function()
     TITW.isTeleporting = false
-    zo_callLater(TITW.checkGuildMembersCurrentZoneAndJump, 1500)
+    zo_callLater(TITW.checkGuildMembersCurrentZoneAndJump, 2500)
 end
 )
 
@@ -205,13 +220,11 @@ end
 function TITW.socialErrorWhilePorting(eventCode, errorCode)
 	if errorCode == nil then errorCode = 0 end
 	TITW.pause = true
-	if errorCode ~= nil then
-	  local displayName, _, _, status, _ = GetGuildMemberInfo(GetGuildId(TITW.guildIndex), TITW.memberIndex)
-	  local _, _, _, _, _, _, _, zoneId = GetGuildMemberCharacterInfo(GetGuildId(TITW.guildIndex), TITW.memberIndex)
-	  TITW.errorJumpingTo[displayName] = zoneId
-	  TITW.pause = false
-	  TITW.checkGuildMembersCurrentZoneAndJump()
-	end
+  local displayName, _, _, status, _ = GetGuildMemberInfo(GetGuildId(TITW.guildIndex), TITW.memberIndex)
+  local _, _, _, _, _, _, _, zoneId = GetGuildMemberCharacterInfo(GetGuildId(TITW.guildIndex), TITW.memberIndex)
+  TITW.errorJumpingTo[displayName] = zoneId
+  TITW.pause = false
+  TITW.checkGuildMembersCurrentZoneAndJump()
 end
 
 EVENT_MANAGER:RegisterForEvent("TITW_SocialError", EVENT_SOCIAL_ERROR, TITW.socialErrorWhilePorting)
