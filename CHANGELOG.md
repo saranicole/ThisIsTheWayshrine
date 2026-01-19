@@ -1,5 +1,6 @@
 ## 2026.01.19
 - Decrease stalled check counter
+- Address case of no valid jumps available
 
 ## 2026.01.18
 - Increase frequency of jumping and failsafe in case of canceling travel
