@@ -151,7 +151,7 @@ function TITW.checkGuildMembersCurrentZoneAndJump()
         EVENT_MANAGER:UnregisterForUpdate("TITW_CheckAndJump")
       end
       local guildId = GetGuildId(TITW.guildIndex)
-      local validJumpsAvailable = false
+      -- local validJumpsAvailable = false
       for memberIndex = TITW.memberIndex, GetNumGuildMembers(guildId) do
         local displayName, _, _, status, _ = GetGuildMemberInfo(guildId, memberIndex)
         local online = (status ~= PLAYER_STATUS_OFFLINE)
@@ -165,15 +165,22 @@ function TITW.checkGuildMembersCurrentZoneAndJump()
                 d(TITW.Lang.GUILD_NAME.." "..TITW.guildIndex..": "..GetGuildName(guildId)..", "..TITW.Lang.TRAVELING_TO.." "..displayName.." "..TITW.Lang.IN.." "..GetZoneNameById(zoneId))
               end
               TITW:triggerJump(displayName, zoneId, memberIndex)
-              validJumpsAvailable = true
+              -- validJumpsAvailable = true
               break
             end
         end
       end
+<<<<<<< Updated upstream
       if not validJumpsAvailable then
         TITW.isTeleporting = false
         TITW.checkGuildMembersCurrentZoneAndJump()
       end
+=======
+--       if not validJumpsAvailable then
+--         TITW.isTeleporting = false
+--         zo_callLater(TITW.checkGuildMembersCurrentZoneAndJump, 10000)
+--       end
+>>>>>>> Stashed changes
       TITW.memberIndex = 1
       TITW.guildIndex = TITW.guildIndex + 1
       if TITW.guildIndex > GetNumGuilds() then
