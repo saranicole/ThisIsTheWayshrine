@@ -27,7 +27,6 @@ TITW.memberIndex = 1
 TITW.guildIndex = 1
 TITW.isTeleporting = false
 TITW.errorJumpingTo = {}
-TITW.pause = false
 TITW.prevJumps = 0
 TITW.numJumps = 0
 TITW.stalledCounter = 0
@@ -147,7 +146,7 @@ local function validateTravel(zoneId)
 end
 
 function TITW.checkGuildMembersCurrentZoneAndJump()
-  if TITW.SV.enableJumping and not TITW.pause then
+  if TITW.SV.enableJumping then
       if next(TITW.alreadyJumpedTo) ~= nil then
         EVENT_MANAGER:UnregisterForUpdate("TITW_CheckAndJump")
       end
@@ -178,7 +177,7 @@ function TITW.checkGuildMembersCurrentZoneAndJump()
 end
 
 function TITW.checkStalled()
-  if TITW.SV.enableJumping and not TITW.pause then
+  if TITW.SV.enableJumping then
     if TITW.prevJumps == TITW.numJumps then
       TITW.stalledCounter = TITW.stalledCounter + 1
     end
@@ -219,17 +218,3 @@ EVENT_MANAGER:RegisterForEvent("TITW_PlayerActivated", EVENT_PLAYER_ACTIVATED, f
     zo_callLater(TITW.checkGuildMembersCurrentZoneAndJump, TITW.waitToJumpDuration)
 end
 )
-
--- Thank you BMU!
--- set flag when an error occurred while starting port process
-function TITW.socialErrorWhilePorting(eventCode, errorCode)
-	if errorCode == nil then errorCode = 0 end
-	TITW.pause = true
-  local displayName, _, _, status, _ = GetGuildMemberInfo(GetGuildId(TITW.guildIndex), TITW.memberIndex)
-  local _, _, _, _, _, _, _, zoneId = GetGuildMemberCharacterInfo(GetGuildId(TITW.guildIndex), TITW.memberIndex)
-  TITW.errorJumpingTo[displayName] = zoneId
-  TITW.pause = false
-  TITW.checkGuildMembersCurrentZoneAndJump()
-end
-
-EVENT_MANAGER:RegisterForEvent("TITW_SocialError", EVENT_SOCIAL_ERROR, TITW.socialErrorWhilePorting)
