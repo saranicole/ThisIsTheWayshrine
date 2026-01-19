@@ -211,7 +211,7 @@ end
 EVENT_MANAGER:RegisterForEvent(TITW.Name, EVENT_ADD_ON_LOADED, OnAddOnLoaded)
 EVENT_MANAGER:RegisterForEvent("TITW_PlayerActivated", EVENT_PLAYER_ACTIVATED, function()
     TITW.isTeleporting = false
-    zo_callLater(TITW.checkGuildMembersCurrentZoneAndJump, 4500)
+    zo_callLater(TITW.checkGuildMembersCurrentZoneAndJump, 10000)
 end
 )
 
