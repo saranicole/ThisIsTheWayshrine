@@ -72,7 +72,7 @@ function TITW.BuildMenu()
         return TITW.SV.selectAll
       end,
       setFunction = function(var)
-        if zoneId then
+        if zoneId ~= nil then
           if TITW.SV.enabledZones[zoneId] == nil then
             TITW.SV.enabledZones[zoneId] = TITW:enumerateWayshrines(nil, zoneId)
           end
