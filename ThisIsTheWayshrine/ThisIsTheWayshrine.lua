@@ -181,7 +181,7 @@ function TITW.checkStalled()
     if TITW.prevJumps == TITW.numJumps then
       TITW.stalledCounter = TITW.stalledCounter + 1
     end
-    if TITW.stalledCounter > 1 then
+    if TITW.stalledCounter > 0 then
       TITW.isTeleporting = false
       TITW.checkGuildMembersCurrentZoneAndJump()
       TITW.stalledCounter = 0
@@ -207,7 +207,7 @@ local function OnAddOnLoaded(eventCode, addonName)
       TITW.SV.firstTimeLoad = false
       EVENT_MANAGER:RegisterForUpdate("TITW_CheckAndJump", 10000, TITW.checkGuildMembersCurrentZoneAndJump)
     end
-    EVENT_MANAGER:RegisterForUpdate("TITW_CheckStalled", 35000, TITW.checkStalled)
+    EVENT_MANAGER:RegisterForUpdate("TITW_CheckStalled", 45000, TITW.checkStalled)
   end, 1500)
 end
 
