@@ -151,6 +151,7 @@ function TITW.checkGuildMembersCurrentZoneAndJump()
         EVENT_MANAGER:UnregisterForUpdate("TITW_CheckAndJump")
       end
       local guildId = GetGuildId(TITW.guildIndex)
+      local validJumpsAvailable = false
       for memberIndex = TITW.memberIndex, GetNumGuildMembers(guildId) do
         local displayName, _, _, status, _ = GetGuildMemberInfo(guildId, memberIndex)
         local online = (status ~= PLAYER_STATUS_OFFLINE)
@@ -164,9 +165,14 @@ function TITW.checkGuildMembersCurrentZoneAndJump()
                 d(TITW.Lang.GUILD_NAME.." "..TITW.guildIndex..": "..GetGuildName(guildId)..", "..TITW.Lang.TRAVELING_TO.." "..displayName.." "..TITW.Lang.IN.." "..GetZoneNameById(zoneId))
               end
               TITW:triggerJump(displayName, zoneId, memberIndex)
+              validJumpsAvailable = true
               break
             end
         end
+      end
+      if not validJumpsAvailable then
+        TITW.isTeleporting = false
+        TITW.checkGuildMembersCurrentZoneAndJump()
       end
       TITW.memberIndex = 1
       TITW.guildIndex = TITW.guildIndex + 1
@@ -181,7 +187,7 @@ function TITW.checkStalled()
     if TITW.prevJumps == TITW.numJumps then
       TITW.stalledCounter = TITW.stalledCounter + 1
     end
-    if TITW.stalledCounter > 1 then
+    if TITW.stalledCounter > 0 then
       TITW.isTeleporting = false
       TITW.checkGuildMembersCurrentZoneAndJump()
       TITW.stalledCounter = 0
@@ -207,7 +213,7 @@ local function OnAddOnLoaded(eventCode, addonName)
       TITW.SV.firstTimeLoad = false
       EVENT_MANAGER:RegisterForUpdate("TITW_CheckAndJump", 10000, TITW.checkGuildMembersCurrentZoneAndJump)
     end
-    EVENT_MANAGER:RegisterForUpdate("TITW_CheckStalled", 35000, TITW.checkStalled)
+    EVENT_MANAGER:RegisterForUpdate("TITW_CheckStalled", 45000, TITW.checkStalled)
   end, 1500)
 end
 
