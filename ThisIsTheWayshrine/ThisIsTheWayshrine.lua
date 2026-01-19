@@ -26,6 +26,8 @@ TITW.alreadyJumpedTo = {}
 TITW.memberIndex = 1
 TITW.guildIndex = 1
 TITW.isTeleporting = false
+TITW.errorJumpingTo = {}
+TITW.pause = false
 
 local function setupNoop()
   return
@@ -119,26 +121,28 @@ function TITW.toggleAvailableZones(var)
 end
 
 function TITW:triggerJump(displayName, zoneId, memberIndex)
+  TITW.isTeleporting = true
   JumpToGuildMember(displayName)
   TITW.alreadyJumpedTo[displayName] = zoneId
   TITW.memberIndex = memberIndex
-  TITW.isTeleporting = true
 end
 
 local function validateTravel(zoneId)
   return not IsUnitInCombat("player") and
     zoneId ~= 181 and
+    CanLeaveCurrentLocationViaTeleport() and
+    not IsInCampaign() and
     not IsUnitDead("player") and
     ZONE_STORIES_GAMEPAD.IsZoneCollectibleUnlocked(zoneId) and
     not TITW:GetZoneFullyDiscovered(zoneId) and
     CanJumpToPlayerInZone(zoneId) and
     TITW.SV.enabledZones[zoneId] ~= nil and
     TITW.SV.enabledZones[zoneId].enabled and
-    not TITW.isTeleporting
+    not TITW.isTeleporting and
 end
 
 function TITW.checkGuildMembersCurrentZoneAndJump()
-  if TITW.SV.enableJumping then
+  if TITW.SV.enableJumping and not TITW.pause then
       if next(TITW.alreadyJumpedTo) ~= nil then
         EVENT_MANAGER:UnregisterForUpdate("TITW_CheckAndJump")
       end
@@ -149,8 +153,7 @@ function TITW.checkGuildMembersCurrentZoneAndJump()
         local _, _, _, _, _, _, _, zoneId = GetGuildMemberCharacterInfo(guildId, memberIndex)
 
         -- Online check
-        if online and displayName ~= GetDisplayName() and TITW.alreadyJumpedTo[displayName] ~= zoneId then
-
+        if online and displayName ~= GetDisplayName() and TITW.alreadyJumpedTo[displayName] ~= zoneId and TITW.errorJumpingTo[displayName] ~= zoneId then
             local okToTravel = validateTravel(zoneId)
             if okToTravel then
               if TITW.SV.announce then
@@ -166,10 +169,6 @@ function TITW.checkGuildMembersCurrentZoneAndJump()
       if TITW.guildIndex > GetNumGuilds() then
         TITW.guildIndex = 1
       end
-      zo_callLater(function()
-        TITW.isTeleporting = false
-        TITW.checkGuildMembersCurrentZoneAndJump()
-      end, 20000)
     end
 end
 
@@ -196,7 +195,23 @@ end
 -- Start Here
 EVENT_MANAGER:RegisterForEvent(TITW.Name, EVENT_ADD_ON_LOADED, OnAddOnLoaded)
 EVENT_MANAGER:RegisterForEvent("TITW_PlayerActivated", EVENT_PLAYER_ACTIVATED, function()
-        TITW.isTeleporting = false
-        TITW.checkGuildMembersCurrentZoneAndJump()
-    end
+    TITW.isTeleporting = false
+    zo_callLater(TITW.checkGuildMembersCurrentZoneAndJump, 1500)
+end
 )
+
+-- Thank you BMU!
+-- set flag when an error occurred while starting port process
+function TITW.socialErrorWhilePorting(eventCode, errorCode)
+	if errorCode == nil then errorCode = 0 end
+	TITW.pause = true
+	if errorCode ~= nil then
+	  local displayName, _, _, status, _ = GetGuildMemberInfo(GetGuildId(TITW.guildIndex), TITW.memberIndex)
+	  local _, _, _, _, _, _, _, zoneId = GetGuildMemberCharacterInfo(GetGuildId(TITW.guildIndex), TITW.memberIndex)
+	  TITW.errorJumpingTo[displayName] = zoneId
+	  TITW.pause = false
+	  TITW.checkGuildMembersCurrentZoneAndJump()
+	end
+end
+
+EVENT_MANAGER:RegisterForEvent("TITW_SocialError", EVENT_SOCIAL_ERROR, TITW.socialErrorWhilePorting)
