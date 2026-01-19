@@ -10,6 +10,7 @@
 - Move call later checkAndJump out of conditional
 - Introduce stalled check instead of calling recursively
 - Increase call later duration
+- Make wait dynamic
 
 ## 2026.01.17
 - Minimum features working

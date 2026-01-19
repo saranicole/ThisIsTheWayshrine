@@ -31,6 +31,11 @@ TITW.pause = false
 TITW.prevJumps = 0
 TITW.numJumps = 0
 TITW.stalledCounter = 0
+TITW.waitToJumpDuration = 2500
+
+if IsConsoleUI() then
+  TITW.waitToJumpDuration = 8000
+end
 
 function TITW.BuildZoneNameCache()
     ZO_ClearTable(TITW.zoneNameToId)
@@ -211,7 +216,7 @@ end
 EVENT_MANAGER:RegisterForEvent(TITW.Name, EVENT_ADD_ON_LOADED, OnAddOnLoaded)
 EVENT_MANAGER:RegisterForEvent("TITW_PlayerActivated", EVENT_PLAYER_ACTIVATED, function()
     TITW.isTeleporting = false
-    zo_callLater(TITW.checkGuildMembersCurrentZoneAndJump, 10000)
+    zo_callLater(TITW.checkGuildMembersCurrentZoneAndJump, TITW.waitToJumpDuration)
 end
 )
 
