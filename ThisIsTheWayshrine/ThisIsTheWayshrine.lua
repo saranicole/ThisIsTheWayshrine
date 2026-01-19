@@ -170,17 +170,10 @@ function TITW.checkGuildMembersCurrentZoneAndJump()
             end
         end
       end
-<<<<<<< Updated upstream
-      if not validJumpsAvailable then
-        TITW.isTeleporting = false
-        TITW.checkGuildMembersCurrentZoneAndJump()
-      end
-=======
 --       if not validJumpsAvailable then
 --         TITW.isTeleporting = false
 --         zo_callLater(TITW.checkGuildMembersCurrentZoneAndJump, 10000)
 --       end
->>>>>>> Stashed changes
       TITW.memberIndex = 1
       TITW.guildIndex = TITW.guildIndex + 1
       if TITW.guildIndex > GetNumGuilds() then
