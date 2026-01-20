@@ -14,5 +14,6 @@ TITW.Lang = {
   ANNOUNCE                         =         "Announce travel destinations",
   GUILD_NAME                       =         "Guild",
   TRAVELING_TO                     =         "traveling to",
-  IN                               =         "in"
+  IN                               =         "in",
+  GUILD_ENABLE_HEADER              =         "Guilds",
 }
