@@ -15,6 +15,11 @@ TITW.Default = {
   firstTimeLoad = true,
 }
 
+TITW.Account = {
+  numGuilds = 0,
+  enableOverrideGuilds = {},
+}
+
 TITW.showing = false
 TITW.hookLock = false
 
@@ -151,29 +156,37 @@ function TITW.checkGuildMembersCurrentZoneAndJump()
         EVENT_MANAGER:UnregisterForUpdate("TITW_CheckAndJump")
       end
       local guildId = GetGuildId(TITW.guildIndex)
-      -- local validJumpsAvailable = false
-      for memberIndex = TITW.memberIndex, GetNumGuildMembers(guildId) do
-        local displayName, _, _, status, _ = GetGuildMemberInfo(guildId, memberIndex)
-        local online = (status ~= PLAYER_STATUS_OFFLINE)
-        local _, _, _, _, _, _, _, zoneId = GetGuildMemberCharacterInfo(guildId, memberIndex)
+      local activePlayersCounter = 0
+      if TITW.AV.enableOverrideGuilds[guildId] == nil or TITW.AV.enableOverrideGuilds[guildId].enabled then
+        for memberIndex = TITW.memberIndex, GetNumGuildMembers(guildId) do
+          local displayName, _, _, status, secsSinceLogoff = GetGuildMemberInfo(guildId, memberIndex)
+          local online = (status ~= PLAYER_STATUS_OFFLINE)
+          local _, _, _, _, _, _, _, zoneId = GetGuildMemberCharacterInfo(guildId, memberIndex)
 
-        -- Online check
-        if online and displayName ~= GetDisplayName() and TITW.alreadyJumpedTo[displayName] ~= zoneId and TITW.errorJumpingTo[displayName] ~= zoneId then
-            local okToTravel = validateTravel(zoneId)
-            if okToTravel then
-              if TITW.SV.announce then
-                d(TITW.Lang.GUILD_NAME.." "..TITW.guildIndex..": "..GetGuildName(guildId)..", "..TITW.Lang.TRAVELING_TO.." "..displayName.." "..TITW.Lang.IN.." "..GetZoneNameById(zoneId))
-              end
-              TITW:triggerJump(displayName, zoneId, memberIndex)
-              -- validJumpsAvailable = true
-              break
+          -- six months in seconds
+          if secsSinceLogoff < 15638400 or online then
+            activePlayersCounter = activePlayersCounter + 1
+          end
+          -- Online check
+          if online then
+            if displayName ~= GetDisplayName() and TITW.alreadyJumpedTo[displayName] ~= zoneId and TITW.errorJumpingTo[displayName] ~= zoneId then
+                local okToTravel = validateTravel(zoneId)
+                if okToTravel then
+                  if TITW.SV.announce then
+                    d(TITW.Lang.GUILD_NAME.." "..TITW.guildIndex..": "..GetGuildName(guildId)..", "..TITW.Lang.TRAVELING_TO.." "..displayName.." "..TITW.Lang.IN.." "..GetZoneNameById(zoneId))
+                  end
+                  TITW:triggerJump(displayName, zoneId, memberIndex)
+                  -- validJumpsAvailable = true
+                  break
+                end
             end
+          end
         end
       end
---       if not validJumpsAvailable then
---         TITW.isTeleporting = false
---         zo_callLater(TITW.checkGuildMembersCurrentZoneAndJump, 10000)
---       end
+      -- Do not try to jump to unpopulated guilds
+      if (GetNumGuildMembers(guildId) == 1 or activePlayersCounter < 5) and TITW.AV.enableOverrideGuilds[guildId] == nil then
+        TITW.AV.enableOverrideGuilds[guildId] = { enabled = false }
+      end
       TITW.memberIndex = 1
       TITW.guildIndex = TITW.guildIndex + 1
       if TITW.guildIndex > GetNumGuilds() then
@@ -202,7 +215,7 @@ local function OnAddOnLoaded(eventCode, addonName)
 	EVENT_MANAGER:UnregisterForEvent(TITW.Name, EVENT_ADD_ON_LOADED)
 
   --Get Account/Character Setting
-  TITW.AV = ZO_SavedVars:NewAccountWide("ThisIsTheWayshrine_Vars", 1, nil, TITW.Default)
+  TITW.AV = ZO_SavedVars:NewAccountWide("ThisIsTheWayshrine_Vars", 1, nil, TITW.Account)
   TITW.CV = ZO_SavedVars:NewCharacterIdSettings("ThisIsTheWayshrine_Vars", 1, nil, TITW.Default)
   TITW.SwitchSV()
   TITW.BuildZoneNameCache()

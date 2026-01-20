@@ -43,6 +43,34 @@ function TITW.BuildMenu()
 
   panel:AddSetting {
     type = LAM.ST_SECTION,
+    label = TITW.Lang.GUILD_ENABLE_HEADER
+  }
+
+  for iDex = 1, GetNumGuilds() do
+    local guildId = GetGuildId(iDex)
+    panel:AddSetting {
+      type = LAM.ST_CHECKBOX,
+      label = GetGuildName(guildId),
+      getFunction = function()
+        if TITW.AV.enableOverrideGuilds[guildId] ~= nil then
+          return TITW.AV.enableOverrideGuilds[guildId].enabled
+        end
+        return true
+      end,
+      setFunction = function(var)
+        if guildId ~= nil then
+          if TITW.AV.enableOverrideGuilds[guildId] == nil then
+            TITW.AV.enableOverrideGuilds[guildId] = { enabled = var }
+          end
+          TITW.AV.enableOverrideGuilds[guildId].enabled = var
+        end
+      end,
+      default = true
+    }
+  end
+
+  panel:AddSetting {
+    type = LAM.ST_SECTION,
     label = TITW.Lang.TOGGLE_ZONE_DISCOVERY,
   }
 

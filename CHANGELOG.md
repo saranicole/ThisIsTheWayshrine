@@ -1,3 +1,6 @@
+## 2026.01.20
+- Auto-disable unpopulated guilds with option to override
+
 ## 2026.01.19
 - Decrease stalled check counter
 - Address case of no valid jumps available
