@@ -52,14 +52,14 @@ function TITW.BuildMenu()
       type = LAM.ST_CHECKBOX,
       label = GetGuildName(guildId),
       getFunction = function()
-        if TITW.AV.enableOverrideGuilds[guildId] ~= nil then
+        if not TITW.AV.enableOverrideGuilds[guildId].initial then
           return TITW.AV.enableOverrideGuilds[guildId].enabled
         end
         return true
       end,
       setFunction = function(var)
         if guildId ~= nil then
-          if TITW.AV.enableOverrideGuilds[guildId] == nil then
+          if TITW.AV.enableOverrideGuilds[guildId].initial then
             TITW.AV.enableOverrideGuilds[guildId] = { enabled = var }
           end
           TITW.AV.enableOverrideGuilds[guildId].enabled = var
