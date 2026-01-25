@@ -1,3 +1,7 @@
+## 2026.01.25
+- Exclude Imperial City zones from jump attempts
+- Fix guild disable/enable
+
 ## 2026.01.20
 - Auto-disable unpopulated guilds with option to override
 
