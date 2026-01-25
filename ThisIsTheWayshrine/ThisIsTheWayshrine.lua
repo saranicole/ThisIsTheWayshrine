@@ -245,7 +245,7 @@ local function OnAddOnLoaded(eventCode, addonName)
   TITW.BuildZoneNameCache()
   zo_callLater(function()
     TITW.BuildMenu()
-    if TITW.SV.firstTimeLoad or next(TITW.AV.enableOverrideGuilds).initial == nil then
+    if TITW.SV.firstTimeLoad or select(1, TITW.AV.enableOverrideGuilds).initial == nil then
       TITW.toggleAvailableZones(true)
       TITW.toggleAvailableGuilds()
       TITW.SV.firstTimeLoad = false
