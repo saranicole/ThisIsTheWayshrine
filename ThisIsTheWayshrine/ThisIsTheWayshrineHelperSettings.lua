@@ -1,8 +1,8 @@
 local TITW = ThisIsTheWayshrine
 
-local LAM = LibHarvensAddonSettings
+local LAM = LibSettingsService
 
-if not LibHarvensAddonSettings then
+if not LibSettingsService then
     return
 end
 
