@@ -1,5 +1,5 @@
 -- ============================================================
---  AddonSettingsFramework.lua  (Console / Gamepad)
+--  LibSettingsService.lua  (Console / Gamepad)
 --  Drop-in settings framework for Elder Scrolls Online addons
 --  targeting the CONSOLE / GAMEPAD UI layer.
 --
@@ -8,7 +8,7 @@
 --
 --  UI system:  ZO_Gamepad parametric scroll list
 --  SavedVars:  caller passes in their own pre-loaded SV table
---  Activation: caller calls registration:Show() / :Hide() / :Toggle()
+--  Activation: caller calls addon:Show() / :Hide() / :Toggle()
 --
 --  SUPPORTED CONTROL TYPES:
 --    checkbox     – on/off boolean toggle
@@ -27,56 +27,63 @@
 --
 --  2. In EVENT_ADD_ON_LOADED, after your SV table is ready:
 --
---        MySettings = AddonSettings:Register({
---            name      = "My Addon",
---            savedVars = MySavedVarsTable,
+--        MySettings = LibSettingsService:AddAddon("My Addon", {
+--            savedVars     = MySavedVarsTable,
+--            allowDefaults = true,   -- auto-adds a Reset to Defaults button
+--            allowRefresh  = true,   -- auto-refreshes rows on write; enables
+--                                    -- RefreshSetting() / RefreshAll()
 --        })
 --
---        MySettings:AddOption({ type="header",   name="General" })
---        MySettings:AddOption({ type="checkbox", name="Enabled",
---            key="enabled", default=true })
---        MySettings:AddOption({ type="slider",   name="Scale",
---            key="scale", min=50, max=200, step=5, default=100 })
+--        MySettings:AddSetting({ type="header",   name="General" })
 --
---  3. Open the menu from a keybind or button in your addon:
+--        local enabledSetting = MySettings:AddSetting({
+--            type="checkbox", name="Enabled", key="enabled", default=true
+--        })
+--
+--  3. When a value changes externally, trigger a refresh of that row:
+--
+--        enabledSetting:Refresh()
+--        -- or by name:
+--        MySettings:RefreshSetting("Enabled")
+--
+--  4. Open the menu:
 --        MySettings:Show()
 --
---  ── DYNAMIC API SUMMARY ──────────────────────────────────────
+--  ── API SUMMARY ──────────────────────────────────────────────
 --
---    :AddOption(def [, afterName])
---        Add a control. Optionally insert after a named control.
---        Returns def for later reference.
+--  LibSettingsService:AddAddon(addonName, config)  →  addon
 --
---    :RemoveOption(nameOrDef)
---        Remove a control by name string or stored def reference.
+--    addon:AddSetting(def [, afterName])  →  settingHandle
+--        Add a setting. Returns a handle with:
+--            handle:Refresh()   – sync this row's display on demand
+--            handle.def         – the underlying definition table
 --
---    :UpdateOption(nameOrDef, changes)
---        Merge changes into an existing def and refresh live.
+--    addon:RefreshSetting(nameOrDef)
+--        Trigger a display refresh for a specific setting by name
+--        or def reference (same as calling handle:Refresh()).
 --
---    :GetOption(name)
---        Return the def table for the first control with that name.
+--    addon:RefreshAll()
+--        Trigger a display refresh for every setting at once.
 --
---    :Show() / :Hide() / :Toggle()
---        Control visibility of the settings scene.
+--    addon:RemoveSetting(nameOrDef)
+--    addon:UpdateSetting(nameOrDef, changes)
+--    addon:GetSetting(name)  →  def
+--    addon:ResetToDefaults()
+--    addon:Show() / :Hide() / :Toggle()
 --
 -- ============================================================
 
-AddonSettings = AddonSettings or {}
+LibSettingsService = LibSettingsService or {}
 
 -- ─────────────────────────────────────────────────────────────
 --  CONSTANTS
---  All virtual template names reference ZOS stock templates that
---  ship with ESO's base UI - no addon XML required.
 -- ─────────────────────────────────────────────────────────────
 
-local SCENE_NAME_PREFIX = "AddonSettingsFramework_Scene_"
-local LIST_TEMPLATE     = "ZO_GamepadMenuEntryTemplate"
-local HEADER_TEMPLATE   = "ZO_GamepadMenuEntryHeaderTemplate"
-local DIVIDER_TEMPLATE  = "ZO_GamepadMenuEntryFullWidthHeaderTemplate"
-
--- ZOS's own gamepad text input dialog - registered by ZOS in their
--- own XML/Lua, present on all platforms including console.
-local ZOS_TEXT_INPUT_DIALOG = "GAMEPAD_TEXT_INPUT"
+local SCENE_NAME_PREFIX  = "LibSettingsService_Scene_"
+local LIST_TEMPLATE      = "ZO_GamepadMenuEntryTemplate"
+local HEADER_TEMPLATE    = "ZO_GamepadMenuEntryHeaderTemplate"
+local DIVIDER_TEMPLATE   = "ZO_GamepadMenuEntryFullWidthHeaderTemplate"
+local ZOS_TEXT_INPUT_DLG = "GAMEPAD_TEXT_INPUT"
 
 -- ─────────────────────────────────────────────────────────────
 --  INTERNAL HELPERS
@@ -128,15 +135,36 @@ local function FmtNum(n)
     return tostring(n)
 end
 
-local function ApplyControlDefault(sv, ctrl)
-    if ctrl.key ~= nil and ctrl.default ~= nil then
+local function ApplySettingDefault(sv, ctrl)
+    if ctrl.key ~= nil and ctrl.default ~= nil and ctrl.getFunction == nil then
         if GetNested(sv, ctrl.key) == nil then
             SetNested(sv, ctrl.key, ctrl.default)
         end
     end
 end
 
-local function FindControl(controls, nameOrDef)
+-- ─────────────────────────────────────────────────────────────
+--  VALUE RESOLVER HELPERS
+-- ─────────────────────────────────────────────────────────────
+
+local function ResolveGet(def, sv)
+    if def.getFunction then return def.getFunction() end
+    if def.key then
+        local v = GetNested(sv, def.key)
+        return (v == nil) and def.default or v
+    end
+    return def.default
+end
+
+local function ResolveSet(def, sv, value)
+    if def.setFunction then
+        def.setFunction(value)
+    elseif def.key then
+        SetNested(sv, def.key, value)
+    end
+end
+
+local function FindSetting(controls, nameOrDef)
     if type(nameOrDef) == "table" then
         for i, ctrl in ipairs(controls) do
             if ctrl == nameOrDef then return i, ctrl end
@@ -151,364 +179,380 @@ end
 
 -- ─────────────────────────────────────────────────────────────
 --  NATIVE TEXT INPUT HELPER
---
---  Wraps ZOS's GAMEPAD_TEXT_INPUT dialog which is defined entirely
---  in ZOS's own code. Requires no addon XML on any platform.
---
---  Expected fields on the data table passed to the dialog:
---    title.text        – header string shown above the input field
---    defaultText       – pre-filled content
---    maxInputChars     – character limit
---    keyboardTitle     – label shown on the virtual keyboard (console)
---    finishedCallback  – function(text) fired on accept
---    cancelCallback    – function() fired on cancel / back
 -- ─────────────────────────────────────────────────────────────
 
 local function ShowTextInput(title, currentText, maxChars, onAccept, onCancel)
-    local data = {
+    ZO_Dialogs_ShowGamepadDialog(ZOS_TEXT_INPUT_DLG, {
         title             = { text = title or "" },
         defaultText       = currentText or "",
         maxInputChars     = maxChars or 256,
         keyboardTitle     = title or "",
-        finishedCallback  = function(text)
-            if onAccept then onAccept(text) end
-        end,
-        cancelCallback    = function()
-            if onCancel then onCancel() end
-        end,
-    }
-    ZO_Dialogs_ShowGamepadDialog(ZOS_TEXT_INPUT_DIALOG, data)
+        finishedCallback  = function(text) if onAccept then onAccept(text) end end,
+        cancelCallback    = function()     if onCancel then onCancel()     end end,
+    })
 end
 
 -- ─────────────────────────────────────────────────────────────
 --  COLOR INPUT HELPER
---
---  Preferred path: ZOS COLOR_PICKER (available on all platforms).
---  Fallback path:  three sequential GAMEPAD_TEXT_INPUT prompts for
---                  R, G, B channels (0-255 integers). No XML needed.
 -- ─────────────────────────────────────────────────────────────
 
 local function ShowColorInput(title, currentColor, onAccept)
     local c = currentColor or { r = 1, g = 1, b = 1, a = 1 }
-
-    -- Preferred: ZOS native color picker
     if COLOR_PICKER then
-        local pickFn = COLOR_PICKER.ShowGamepad or COLOR_PICKER.Show
-        if pickFn then
-            pickFn(COLOR_PICKER, function(r, g, b, a)
+        local fn = COLOR_PICKER.ShowGamepad or COLOR_PICKER.Show
+        if fn then
+            fn(COLOR_PICKER, function(r, g, b, a)
                 onAccept({ r = r, g = g, b = b, a = a or 1 })
             end, c.r, c.g, c.b, c.a, title)
             return
         end
     end
-
-    -- Fallback: sequential R -> G -> B prompts via GAMEPAD_TEXT_INPUT
     local r, g, b = c.r, c.g, c.b
-
     local function AskB()
-        ShowTextInput(
-            (title or "Color") .. " – Blue (0-255)",
-            tostring(math.floor(b * 255)),
-            3,
-            function(text)
-                b = math.max(0, math.min(255, tonumber(text) or 0)) / 255
+        ShowTextInput((title or "Color") .. " – Blue (0-255)",
+            tostring(math.floor(b * 255)), 3, function(t)
+                b = math.max(0, math.min(255, tonumber(t) or 0)) / 255
                 onAccept({ r = r, g = g, b = b, a = c.a or 1 })
-            end
-        )
+            end)
     end
-
     local function AskG()
-        ShowTextInput(
-            (title or "Color") .. " – Green (0-255)",
-            tostring(math.floor(g * 255)),
-            3,
-            function(text)
-                g = math.max(0, math.min(255, tonumber(text) or 0)) / 255
+        ShowTextInput((title or "Color") .. " – Green (0-255)",
+            tostring(math.floor(g * 255)), 3, function(t)
+                g = math.max(0, math.min(255, tonumber(t) or 0)) / 255
                 AskB()
-            end
-        )
+            end)
     end
-
-    ShowTextInput(
-        (title or "Color") .. " – Red (0-255)",
-        tostring(math.floor(r * 255)),
-        3,
-        function(text)
-            r = math.max(0, math.min(255, tonumber(text) or 0)) / 255
+    ShowTextInput((title or "Color") .. " – Red (0-255)",
+        tostring(math.floor(r * 255)), 3, function(t)
+            r = math.max(0, math.min(255, tonumber(t) or 0)) / 255
             AskG()
-        end
-    )
+        end)
 end
 
 -- ─────────────────────────────────────────────────────────────
 --  ENTRY BUILDERS
---  Each returns a list of ZO_GamepadEntryData objects.
+--
+--  Each builder returns a list of ZO_GamepadEntryData objects.
+--  Every entry that holds a value also exposes:
+--
+--    entry.SyncDisplay()
+--        Re-reads the current value via ResolveGet, updates the
+--        entry's subLabel in-place, and returns true if the
+--        displayed value actually changed (so the caller knows
+--        whether RefreshVisible() is needed).
+--
+--  SyncDisplay is used by the trigger-based RefreshSetting / RefreshAll
+--  paths AND by the automatic write-triggered refresh when
+--  allowRefresh = true.
+--
+--  When allowRefresh = true every builder's write path calls
+--  addon:_OnSettingWritten(entry) instead of addon:_RefreshList().
+--  _OnSettingWritten calls SyncDisplay on just that entry and then
+--  RefreshVisible if the label changed — a cheap targeted repaint with
+--  no full repopulate and no timers.
 -- ─────────────────────────────────────────────────────────────
 
 local EntryBuilders = {}
 
 -- ── header ───────────────────────────────────────────────────
-EntryBuilders["header"] = function(def, _sv, _reg)
+EntryBuilders["header"] = function(def, _sv, _addon)
     local entry = ZO_GamepadEntryData:New(def.name or "", nil)
     entry:SetHeader(def.name or "")
     entry.isInteractive = false
     entry.templateName  = HEADER_TEMPLATE
+    entry.SyncDisplay   = function() return false end
     return { entry }
 end
 
 -- ── divider ──────────────────────────────────────────────────
-EntryBuilders["divider"] = function(_def, _sv, _reg)
+EntryBuilders["divider"] = function(_def, _sv, _addon)
     local entry = ZO_GamepadEntryData:New("", nil)
     entry.isInteractive = false
     entry.templateName  = DIVIDER_TEMPLATE
+    entry.SyncDisplay   = function() return false end
     return { entry }
 end
 
 -- ── checkbox ─────────────────────────────────────────────────
-EntryBuilders["checkbox"] = function(def, sv, reg)
-    local function GetVal()
-        local v = GetNested(sv, def.key)
-        return (v == nil) and def.default or v
-    end
-    local function GetSubLabel()
-        return GetVal()
-            and GetString(SI_CHECK_BUTTON_ON)
-            or  GetString(SI_CHECK_BUTTON_OFF)
+EntryBuilders["checkbox"] = function(def, sv, addon)
+    local function GetVal()   return ResolveGet(def, sv) end
+    local function SubLabel()
+        return GetVal() and GetString(SI_CHECK_BUTTON_ON) or GetString(SI_CHECK_BUTTON_OFF)
     end
 
     local entry = ZO_GamepadEntryData:New(def.name or "", nil)
-    entry.subLabel      = GetSubLabel()
-    entry.tooltip       = def.tooltip
-    entry.isInteractive = true
-    entry.templateName  = LIST_TEMPLATE
+    entry.subLabel            = SubLabel()
+    entry.tooltip             = def.tooltip
+    entry.isInteractive       = true
+    entry.templateName        = LIST_TEMPLATE
+    entry._lastDisplayedValue = GetVal()
 
     entry.Activate = function()
         local newVal = not GetVal()
-        SetNested(sv, def.key, newVal)
-        entry.subLabel = GetSubLabel()
-        reg:_RefreshList()
+        ResolveSet(def, sv, newVal)
+        entry.subLabel            = SubLabel()
+        entry._lastDisplayedValue = newVal
+        addon:_OnSettingWritten(entry)
         if def.onChange then def.onChange(newVal) end
     end
+    entry.OnDirectionalInput = function(_) entry.Activate() end
 
-    entry.OnDirectionalInput = function(_direction)
-        entry.Activate()
+    entry.SyncDisplay = function()
+        local cur = GetVal()
+        if cur ~= entry._lastDisplayedValue then
+            entry.subLabel            = SubLabel()
+            entry._lastDisplayedValue = cur
+            return true
+        end
+        return false
     end
 
     return { entry }
 end
 
 -- ── slider ───────────────────────────────────────────────────
-EntryBuilders["slider"] = function(def, sv, reg)
+EntryBuilders["slider"] = function(def, sv, addon)
     local min  = def.min  or 0
     local max  = def.max  or 100
     local step = def.step or 1
 
     local function GetVal()
-        local v = GetNested(sv, def.key)
-        if v == nil then v = def.default or min end
-        return SnapToStep(v, min, max, step)
+        local v = ResolveGet(def, sv)
+        return SnapToStep(v ~= nil and v or min, min, max, step)
     end
-    local function GetSubLabel()
-        return FmtNum(GetVal()) .. " / " .. FmtNum(max)
-    end
+    local function SubLabel() return FmtNum(GetVal()) .. " / " .. FmtNum(max) end
 
     local entry = ZO_GamepadEntryData:New(def.name or "", nil)
-    entry.subLabel      = GetSubLabel()
-    entry.tooltip       = def.tooltip
-    entry.isInteractive = true
-    entry.templateName  = LIST_TEMPLATE
+    entry.subLabel            = SubLabel()
+    entry.tooltip             = def.tooltip
+    entry.isInteractive       = true
+    entry.templateName        = LIST_TEMPLATE
+    entry._lastDisplayedValue = GetVal()
 
     local function ChangeBy(delta)
         local newVal = SnapToStep(GetVal() + delta, min, max, step)
-        SetNested(sv, def.key, newVal)
-        entry.subLabel = GetSubLabel()
-        reg:_RefreshList()
+        ResolveSet(def, sv, newVal)
+        entry.subLabel            = SubLabel()
+        entry._lastDisplayedValue = newVal
+        addon:_OnSettingWritten(entry)
         if def.onChange then def.onChange(newVal) end
     end
 
     entry.Activate           = function() ChangeBy(step) end
     entry.OnDirectionalInput = function(direction)
-        if direction == MOVEMENT_CONTROLLER_DIRECTION_NEGATIVE then
-            ChangeBy(-step)
-        else
-            ChangeBy(step)
+        ChangeBy(direction == MOVEMENT_CONTROLLER_DIRECTION_NEGATIVE and -step or step)
+    end
+
+    entry.SyncDisplay = function()
+        local cur = GetVal()
+        if cur ~= entry._lastDisplayedValue then
+            entry.subLabel            = SubLabel()
+            entry._lastDisplayedValue = cur
+            return true
         end
+        return false
     end
 
     return { entry }
 end
 
 -- ── dropdown ─────────────────────────────────────────────────
-EntryBuilders["dropdown"] = function(def, sv, reg)
+EntryBuilders["dropdown"] = function(def, sv, addon)
     local choices = def.choices or {}
 
     local function GetVal()
-        local v = GetNested(sv, def.key)
-        if v == nil then v = def.default or choices[1] end
-        return v
+        local v = ResolveGet(def, sv)
+        return v ~= nil and v or choices[1]
     end
     local function GetIndex()
         local cur = GetVal()
-        for i, c in ipairs(choices) do
-            if c == cur then return i end
-        end
+        for i, c in ipairs(choices) do if c == cur then return i end end
         return 1
     end
 
     local entry = ZO_GamepadEntryData:New(def.name or "", nil)
-    entry.subLabel      = tostring(GetVal())
-    entry.tooltip       = def.tooltip
-    entry.isInteractive = true
-    entry.templateName  = LIST_TEMPLATE
+    entry.subLabel            = tostring(GetVal())
+    entry.tooltip             = def.tooltip
+    entry.isInteractive       = true
+    entry.templateName        = LIST_TEMPLATE
+    entry._lastDisplayedValue = GetVal()
 
     local function CycleBy(delta)
         if #choices == 0 then return end
-        local newIdx = ((GetIndex() - 1 + delta) % #choices) + 1
-        local newVal = choices[newIdx]
-        SetNested(sv, def.key, newVal)
-        entry.subLabel = tostring(newVal)
-        reg:_RefreshList()
+        local newVal = choices[((GetIndex() - 1 + delta) % #choices) + 1]
+        ResolveSet(def, sv, newVal)
+        entry.subLabel            = tostring(newVal)
+        entry._lastDisplayedValue = newVal
+        addon:_OnSettingWritten(entry)
         if def.onChange then def.onChange(newVal) end
     end
 
     entry.Activate           = function() CycleBy(1) end
     entry.OnDirectionalInput = function(direction)
-        if direction == MOVEMENT_CONTROLLER_DIRECTION_NEGATIVE then
-            CycleBy(-1)
-        else
-            CycleBy(1)
+        CycleBy(direction == MOVEMENT_CONTROLLER_DIRECTION_NEGATIVE and -1 or 1)
+    end
+
+    entry.SyncDisplay = function()
+        local cur = GetVal()
+        if cur ~= entry._lastDisplayedValue then
+            entry.subLabel            = tostring(cur)
+            entry._lastDisplayedValue = cur
+            return true
         end
+        return false
     end
 
     return { entry }
 end
 
 -- ── colorpicker ───────────────────────────────────────────────
-EntryBuilders["colorpicker"] = function(def, sv, reg)
+EntryBuilders["colorpicker"] = function(def, sv, addon)
     local function GetVal()
-        local v = GetNested(sv, def.key)
+        local v = ResolveGet(def, sv)
         if v == nil then
             v = def.default or { r = 1, g = 1, b = 1, a = 1 }
-            SetNested(sv, def.key, v)
+            if not def.getFunction and def.key then SetNested(sv, def.key, v) end
         end
         return v
     end
-    local function GetSubLabel()
+    local function ColorKey(c)
+        return string.format("%.4f:%.4f:%.4f:%.4f", c.r, c.g, c.b, c.a or 1)
+    end
+    local function SubLabel()
         local c = GetVal()
-        return string.format("R:%.0f G:%.0f B:%.0f",
-            c.r * 255, c.g * 255, c.b * 255)
+        return string.format("R:%.0f G:%.0f B:%.0f", c.r*255, c.g*255, c.b*255)
     end
 
     local entry = ZO_GamepadEntryData:New(def.name or "", nil)
-    entry.subLabel      = GetSubLabel()
-    entry.tooltip       = def.tooltip
-    entry.isInteractive = true
-    entry.templateName  = LIST_TEMPLATE
+    entry.subLabel            = SubLabel()
+    entry.tooltip             = def.tooltip
+    entry.isInteractive       = true
+    entry.templateName        = LIST_TEMPLATE
+    entry._lastDisplayedValue = ColorKey(GetVal())
 
     entry.Activate = function()
         ShowColorInput(def.name, GetVal(), function(col)
-            SetNested(sv, def.key, col)
-            entry.subLabel = GetSubLabel()
-            reg:_RefreshList()
+            ResolveSet(def, sv, col)
+            entry.subLabel            = SubLabel()
+            entry._lastDisplayedValue = ColorKey(col)
+            addon:_OnSettingWritten(entry)
             if def.onChange then def.onChange(col) end
         end)
+    end
+
+    entry.SyncDisplay = function()
+        local cur = ColorKey(GetVal())
+        if cur ~= entry._lastDisplayedValue then
+            entry.subLabel            = SubLabel()
+            entry._lastDisplayedValue = cur
+            return true
+        end
+        return false
     end
 
     return { entry }
 end
 
 -- ── textbox ───────────────────────────────────────────────────
-EntryBuilders["textbox"] = function(def, sv, reg)
+EntryBuilders["textbox"] = function(def, sv, addon)
     local function GetVal()
-        local v = GetNested(sv, def.key)
-        return (v == nil) and (def.default or "") or v
+        local v = ResolveGet(def, sv)
+        return v ~= nil and v or (def.default or "")
     end
 
     local entry = ZO_GamepadEntryData:New(def.name or "", nil)
-    entry.subLabel      = tostring(GetVal())
-    entry.tooltip       = def.tooltip
-    entry.isInteractive = true
-    entry.templateName  = LIST_TEMPLATE
+    entry.subLabel            = tostring(GetVal())
+    entry.tooltip             = def.tooltip
+    entry.isInteractive       = true
+    entry.templateName        = LIST_TEMPLATE
+    entry._lastDisplayedValue = tostring(GetVal())
 
     entry.Activate = function()
-        ShowTextInput(
-            def.name,
-            tostring(GetVal()),
-            def.maxChars or 256,
+        ShowTextInput(def.name, tostring(GetVal()), def.maxChars or 256,
             function(text)
-                SetNested(sv, def.key, text)
-                entry.subLabel = text
-                reg:_RefreshList()
+                ResolveSet(def, sv, text)
+                entry.subLabel            = text
+                entry._lastDisplayedValue = text
+                addon:_OnSettingWritten(entry)
                 if def.onChange then def.onChange(text) end
-            end
-        )
+            end)
+    end
+
+    entry.SyncDisplay = function()
+        local cur = tostring(GetVal())
+        if cur ~= entry._lastDisplayedValue then
+            entry.subLabel            = cur
+            entry._lastDisplayedValue = cur
+            return true
+        end
+        return false
     end
 
     return { entry }
 end
 
 -- ── iconchooser ───────────────────────────────────────────────
-EntryBuilders["iconchooser"] = function(def, sv, reg)
+EntryBuilders["iconchooser"] = function(def, sv, addon)
     local icons = def.icons or {}
 
     local function GetVal()
-        local v = GetNested(sv, def.key)
-        if v == nil then v = def.default or icons[1] or "" end
-        return v
+        local v = ResolveGet(def, sv)
+        return v ~= nil and v or (icons[1] or "")
     end
     local function GetIndex()
         local cur = GetVal()
-        for i, path in ipairs(icons) do
-            if path == cur then return i end
-        end
+        for i, p in ipairs(icons) do if p == cur then return i end end
         return 1
     end
-    local function ShortPath(p)
-        return (p and p:match("([^/]+)%.%a+$")) or p or ""
-    end
+    local function ShortPath(p) return (p and p:match("([^/]+)%.%a+$")) or p or "" end
 
     local entry = ZO_GamepadEntryData:New(def.name or "", nil)
-    entry.subLabel      = ShortPath(GetVal())
-    entry.icon          = GetVal()
-    entry.tooltip       = def.tooltip
-    entry.isInteractive = true
-    entry.templateName  = LIST_TEMPLATE
+    entry.subLabel            = ShortPath(GetVal())
+    entry.icon                = GetVal()
+    entry.tooltip             = def.tooltip
+    entry.isInteractive       = true
+    entry.templateName        = LIST_TEMPLATE
+    entry._lastDisplayedValue = GetVal()
 
     local function CycleBy(delta)
         if #icons == 0 then return end
-        local newIdx = ((GetIndex() - 1 + delta) % #icons) + 1
-        local newVal = icons[newIdx]
-        SetNested(sv, def.key, newVal)
-        entry.subLabel = ShortPath(newVal)
-        entry.icon     = newVal
-        reg:_RefreshList()
+        local newVal = icons[((GetIndex() - 1 + delta) % #icons) + 1]
+        ResolveSet(def, sv, newVal)
+        entry.subLabel            = ShortPath(newVal)
+        entry.icon                = newVal
+        entry._lastDisplayedValue = newVal
+        addon:_OnSettingWritten(entry)
         if def.onChange then def.onChange(newVal) end
     end
 
     entry.Activate           = function() CycleBy(1) end
     entry.OnDirectionalInput = function(direction)
-        if direction == MOVEMENT_CONTROLLER_DIRECTION_NEGATIVE then
-            CycleBy(-1)
-        else
-            CycleBy(1)
+        CycleBy(direction == MOVEMENT_CONTROLLER_DIRECTION_NEGATIVE and -1 or 1)
+    end
+
+    entry.SyncDisplay = function()
+        local cur = GetVal()
+        if cur ~= entry._lastDisplayedValue then
+            entry.subLabel            = ShortPath(cur)
+            entry.icon                = cur
+            entry._lastDisplayedValue = cur
+            return true
         end
+        return false
     end
 
     return { entry }
 end
 
 -- ── button ────────────────────────────────────────────────────
-EntryBuilders["button"] = function(def, _sv, _reg)
+EntryBuilders["button"] = function(def, _sv, _addon)
     local entry = ZO_GamepadEntryData:New(def.name or "Button", nil)
     entry.subLabel      = def.subLabel or ""
     entry.tooltip       = def.tooltip
     entry.isInteractive = true
     entry.templateName  = LIST_TEMPLATE
-
-    entry.Activate = function()
-        if def.onClick then def.onClick() end
-    end
-
+    entry.Activate      = function() if def.onClick then def.onClick() end end
+    entry.SyncDisplay   = function() return false end
     return { entry }
 end
 
@@ -518,31 +562,28 @@ end
 
 local SettingsScreen = ZO_Object:Subclass()
 
-function SettingsScreen:New(registration)
+function SettingsScreen:New(addon)
     local obj = ZO_Object.New(self)
-    obj:Initialize(registration)
+    obj:Initialize(addon)
     return obj
 end
 
-function SettingsScreen:Initialize(registration)
-    self.registration = registration
-    self.sceneName    = SCENE_NAME_PREFIX
-        .. tostring(registration.name):gsub("[%s%p]", "_")
+function SettingsScreen:Initialize(addon)
+    self.addon     = addon
+    self.sceneName = SCENE_NAME_PREFIX .. tostring(addon.name):gsub("[%s%p]", "_")
 
-    -- ZO_GamepadParametricScrollScreen is a ZOS stock virtual template.
-    -- It provides a full-screen control with a named child
-    -- "ParametricScrollList" already set up. No addon XML needed.
+    -- Maps def → built entry (or list of entries for multi-entry types).
+    -- Populated fresh on every _PopulateList call.
+    -- Used by RefreshSetting to find the right entry without rescanning
+    -- the whole list.
+    self._entryByDef = {}
+
     self.control = WINDOW_MANAGER:CreateControlFromVirtual(
-        self.sceneName .. "_Control",
-        GuiRoot,
-        "ZO_GamepadParametricScrollScreen"
-    )
+        self.sceneName .. "_Control", GuiRoot, "ZO_GamepadParametricScrollScreen")
     self.control:SetHidden(true)
 
     self.list = self.control:GetNamedChild("ParametricScrollList")
-    if not self.list then
-        self.list = ZO_GamepadVerticalParametricScrollList:New(self.control)
-    end
+        or ZO_GamepadVerticalParametricScrollList:New(self.control)
 
     self:_SetupTemplates()
     self:_SetupScene()
@@ -550,26 +591,17 @@ function SettingsScreen:Initialize(registration)
 end
 
 function SettingsScreen:_SetupTemplates()
-    -- All templates are ZOS stock, defined in ZOS's own XML.
-    self.list:AddDataTemplate(
-        LIST_TEMPLATE,
+    self.list:AddDataTemplate(LIST_TEMPLATE,
         ZO_SharedGamepadEntry_OnSetup,
         ZO_GamepadMenuEntryTemplateParametricListFunction)
-
-    self.list:AddDataTemplateWithHeader(
-        LIST_TEMPLATE,
+    self.list:AddDataTemplateWithHeader(LIST_TEMPLATE,
         ZO_SharedGamepadEntry_OnSetup,
         ZO_GamepadMenuEntryTemplateParametricListFunction,
-        nil,
-        HEADER_TEMPLATE)
-
-    self.list:AddDataTemplate(
-        HEADER_TEMPLATE,
+        nil, HEADER_TEMPLATE)
+    self.list:AddDataTemplate(HEADER_TEMPLATE,
         ZO_SharedGamepadEntry_OnSetup,
         ZO_GamepadMenuEntryTemplateParametricListFunction)
-
-    self.list:AddDataTemplate(
-        DIVIDER_TEMPLATE,
+    self.list:AddDataTemplate(DIVIDER_TEMPLATE,
         ZO_SharedGamepadEntry_OnSetup,
         ZO_GamepadMenuEntryTemplateParametricListFunction)
 end
@@ -577,7 +609,6 @@ end
 function SettingsScreen:_SetupScene()
     self.scene = ZO_Scene:New(self.sceneName, SCENE_MANAGER)
     local screen = self
-
     self.scene:RegisterCallback("StateChange", function(_, newState)
         if newState == SCENE_SHOWING then
             screen.control:SetHidden(false)
@@ -618,28 +649,64 @@ end
 
 function SettingsScreen:_PopulateList()
     self.list:Clear()
-    local sv   = self.registration.savedVars
-    local defs = self.registration.controls
+    self._entryByDef = {}
+
+    local sv   = self.addon.savedVars
+    local defs = self.addon.controls
 
     for _, def in ipairs(defs) do
         local builder = EntryBuilders[def.type]
         if builder then
-            local entries = builder(def, sv, self.registration)
+            local entries = builder(def, sv, self.addon)
+            self._entryByDef[def] = entries   -- store all entries for this def
             for _, entry in ipairs(entries) do
                 self.list:AddEntry(entry.templateName or LIST_TEMPLATE, entry)
             end
         else
-            d(string.format("[AddonSettings] Unknown control type '%s' in '%s'",
-                tostring(def.type), tostring(self.registration.name)))
+            d(string.format("[LibSettingsService] Unknown control type '%s' in '%s'",
+                tostring(def.type), tostring(self.addon.name)))
         end
     end
 
     self.list:Commit()
 end
 
+-- Full repopulate – used when the controls list changes structurally
+-- (add, remove, update).  Resets scroll position.
 function SettingsScreen:RefreshList()
     if SCENE_MANAGER:IsShowing(self.sceneName) then
         self:_PopulateList()
+    end
+end
+
+-- Targeted refresh – sync the display of entries that belong to a
+-- specific def, then repaint only the visible rows.  Scroll position
+-- is preserved.  No-op when the scene is not showing.
+function SettingsScreen:RefreshSetting(def)
+    if not SCENE_MANAGER:IsShowing(self.sceneName) then return end
+    local entries = self._entryByDef[def]
+    if not entries then return end
+    local dirty = false
+    for _, entry in ipairs(entries) do
+        if entry.SyncDisplay and entry.SyncDisplay() then dirty = true end
+    end
+    if dirty then
+        self.list:RefreshVisible()
+    end
+end
+
+-- Targeted refresh of every setting at once.  Preferred over a full
+-- _PopulateList because it preserves scroll position.
+function SettingsScreen:RefreshAll()
+    if not SCENE_MANAGER:IsShowing(self.sceneName) then return end
+    local dirty = false
+    for _, entries in pairs(self._entryByDef) do
+        for _, entry in ipairs(entries) do
+            if entry.SyncDisplay and entry.SyncDisplay() then dirty = true end
+        end
+    end
+    if dirty then
+        self.list:RefreshVisible()
     end
 end
 
@@ -653,64 +720,113 @@ function SettingsScreen:Hide()
 end
 
 function SettingsScreen:Toggle()
-    if SCENE_MANAGER:IsShowing(self.sceneName) then
-        self:Hide()
-    else
-        self:Show()
-    end
+    if SCENE_MANAGER:IsShowing(self.sceneName) then self:Hide() else self:Show() end
 end
 
 -- ─────────────────────────────────────────────────────────────
---  PUBLIC API  –  AddonSettings:Register(config)
+--  PUBLIC API  –  LibSettingsService:AddAddon(addonName, config)
 -- ─────────────────────────────────────────────────────────────
 
 --[[
   ════════════════════════════════════════════════════════════
-  AddonSettings:Register(config)  →  registration
+  LibSettingsService:AddAddon(addonName, config)  →  addon
+
+  addonName  (string)   Scopes all scene/control names.  Used as
+                        the panel title.  Multiple addons never
+                        collide as long as their names differ.
 
   config fields:
-    name       (string)   Display name shown as the panel header.
-    savedVars  (table)    Your pre-loaded ZO_SavedVars table.
-    controls   (table)    Optional seed list of control definitions.
-                          Can be omitted and built via :AddOption().
-    defaults   (table)    Optional top-level defaults shorthand.
+    savedVars     (table)    Required. Your pre-loaded ZO_SavedVars table.
+    controls      (table)    Optional seed list of setting definitions.
+    defaults      (table)    Optional top-level { key=value } defaults
+                             applied non-destructively to savedVars.
+    allowDefaults (boolean)  Auto-appends a "Reset to Defaults" button.
+    allowRefresh  (boolean)  When true, every write made through the menu
+                             automatically triggers a targeted display
+                             refresh of just that setting's row — no
+                             polling, no timers, no external calls needed.
+                             Also enables :RefreshSetting() and
+                             :RefreshAll() for syncing values that were
+                             changed outside the menu.
 
   ════════════════════════════════════════════════════════════
-  registration methods:
+  addon methods:
 
   ── Display ──────────────────────────────────────────────────
     :Show()     Push settings scene onto the gamepad scene stack.
     :Hide()     Pop / hide the current scene.
     :Toggle()   Show if hidden, hide if showing.
 
-  ── Dynamic option management ────────────────────────────────
-    :AddOption(def [, afterName])
-        Add a new control. If afterName is given it is inserted
-        immediately after the first control with that name;
-        otherwise appended. Returns the def table.
+  ── Setting management ───────────────────────────────────────
+    :AddSetting(def [, afterName])  →  settingHandle
+        Add a new setting control and return a handle for it.
 
-    :RemoveOption(nameOrDef)
-        Remove a control by name string or def table reference.
+        settingHandle fields:
+            .def          The definition table passed to AddSetting.
+            :Refresh()    Sync this setting's row display to the current
+                          value immediately.  Safe to call at any time,
+                          including when the menu is not open (no-op).
 
-    :UpdateOption(nameOrDef, changes)
+        This is the primary way to trigger a display update when your
+        addon changes a value externally:
+
+            local scaleSetting = MySettings:AddSetting({
+                type = "slider", name = "Scale",
+                key = "scale", min = 50, max = 200, step = 5, default = 100,
+            })
+
+            -- Somewhere else in your addon when the value changes:
+            MyAddon_SV.scale = 75
+            scaleSetting:Refresh()
+
+    :RefreshSetting(nameOrDef)
+        Trigger a display refresh for a specific setting by name
+        string or def/handle reference.  Equivalent to
+        handle:Refresh() but usable when you only have the name.
+
+    :RefreshAll()
+        Trigger a display refresh for every setting at once.
+        Useful after a bulk external update (e.g. profile switch).
+        Only available when allowRefresh = true.
+
+    :RemoveSetting(nameOrDef)
+        Remove a setting by name string or handle/def reference.
+
+    :UpdateSetting(nameOrDef, changes)
         Merge a changes table into an existing def and refresh.
 
-    :GetOption(name)
-        Return the def for the first control whose .name matches.
+    :GetSetting(name)  →  def
+        Return the def for the first setting whose .name matches.
 
-  ── Internal (used by entry builders) ────────────────────────
-    :_RefreshList()   Repopulate list if scene is currently open.
+    :ResetToDefaults()
+        Write every setting's .default back through ResolveSet and
+        refresh the list.  Also fired by the auto "Reset to Defaults"
+        button when allowDefaults = true.
+
+  ── Internal ─────────────────────────────────────────────────
+    :_RefreshList()   Full repopulate.  Called internally by entry
+                      builders after a structural change or user
+                      interaction.  Not normally needed by addon authors.
 
   ════════════════════════════════════════════════════════════
-  Control definition reference:
+  Setting definition reference:
 
   Shared fields (all types):
-    type      (string)    Required.
-    name      (string)    Row label.
-    key       (string)    Dot-path into savedVars e.g. "display.scale"
-    default   (any)       Written once if key is absent in savedVars.
-    tooltip   (string)    Shown in the gamepad tooltip area.
-    onChange  (function)  Called with the new value after each change.
+    type         (string)    Required.
+    name         (string)    Row label.
+    tooltip      (string)    Shown in the gamepad tooltip area.
+    onChange     (function)  Called with the new value after each change.
+
+  Value storage – choose ONE approach:
+
+  ── key-based (standard saved-variable storage) ───────────────
+    key          (string)    Dot-path into savedVars e.g. "ui.scale"
+    default      (any)       Written once to savedVars if key is absent.
+
+  ── function-based (custom / computed storage) ────────────────
+    getFunction  (function)  Called with no args; returns current value.
+    setFunction  (function)  Called with (value); stores it as needed.
+    Both must be supplied together. key/default are ignored for I/O.
 
   Per-type extras:
     checkbox    – (none)
@@ -722,112 +838,259 @@ end
     button      – onClick (function), subLabel (string, optional)
     header      – (no key / default / onChange)
     divider     – (no fields needed)
+
   ════════════════════════════════════════════════════════════
+  Example:
+
+    EVENT_MANAGER:RegisterForEvent("MyAddon_Loaded", EVENT_ADD_ON_LOADED,
+        function(_, addonName)
+            if addonName ~= "MyAddon" then return end
+
+            MyAddon_SV = ZO_SavedVars:NewAccountWide("MyAddon_SV", 1, nil, {})
+
+            MySettings = LibSettingsService:AddAddon("My Addon", {
+                savedVars     = MyAddon_SV,
+                allowDefaults = true,
+                allowRefresh  = true,
+            })
+
+            MySettings:AddSetting({ type = "header", name = "Display" })
+
+            local scaleSetting = MySettings:AddSetting({
+                type = "slider", name = "Scale",
+                key = "scale", min = 50, max = 200, step = 5, default = 100,
+                onChange = function(v) MyAddon:SetScale(v) end,
+            })
+
+            local modeSetting = MySettings:AddSetting({
+                type = "dropdown", name = "Mode",
+                key = "mode", choices = { "Fast", "Balanced", "Quality" },
+                default = "Balanced",
+            })
+
+            -- When your addon changes these values externally, sync the UI:
+            --   MyAddon_SV.scale = 75
+            --   scaleSetting:Refresh()
+            --
+            --   MyAddon_SV.mode = "Fast"
+            --   MySettings:RefreshSetting("Mode")
+            --
+            --   MyAddon:LoadProfile(profileData)  -- bulk change
+            --   MySettings:RefreshAll()
+        end)
 --]]
 
-function AddonSettings:Register(config)
-    assert(type(config)           == "table", "[AddonSettings] config must be a table")
-    assert(type(config.savedVars) == "table", "[AddonSettings] config.savedVars must be a table")
+function LibSettingsService:AddAddon(addonName, config)
+    assert(type(addonName)        == "string", "[LibSettingsService] addonName must be a string")
+    assert(type(config)           == "table",  "[LibSettingsService] config must be a table")
+    assert(type(config.savedVars) == "table",  "[LibSettingsService] config.savedVars must be a table")
 
     config.controls = config.controls or {}
-    assert(type(config.controls) == "table", "[AddonSettings] config.controls must be a table")
+    assert(type(config.controls)  == "table",  "[LibSettingsService] config.controls must be a table")
 
     if type(config.defaults) == "table" then
         ApplyDefaults(config.savedVars, config.defaults)
     end
-
     for _, ctrl in ipairs(config.controls) do
-        ApplyControlDefault(config.savedVars, ctrl)
+        ApplySettingDefault(config.savedVars, ctrl)
     end
 
-    local registration = {
-        name      = config.name or "Addon Settings",
-        savedVars = config.savedVars,
-        controls  = config.controls,
-        _screen   = nil,
+    local addon = {
+        name          = addonName,
+        savedVars     = config.savedVars,
+        controls      = config.controls,
+        allowDefaults = config.allowDefaults == true,
+        allowRefresh  = config.allowRefresh  == true,
+        _screen       = nil,
+        -- Maps def → settingHandle, so RefreshSetting(nameOrDef) can
+        -- accept a handle as well as a plain def or name string.
+        _handleByDef  = {},
     }
 
     local function EnsureScreen()
-        if not registration._screen then
-            registration._screen = SettingsScreen:New(registration)
+        if not addon._screen then
+            if addon.allowDefaults then
+                local hasReset = false
+                for _, ctrl in ipairs(addon.controls) do
+                    if ctrl._isDefaultsButton then hasReset = true; break end
+                end
+                if not hasReset then
+                    table.insert(addon.controls, {
+                        type              = "button",
+                        name              = "Reset to Defaults",
+                        _isDefaultsButton = true,
+                        onClick           = function() addon:ResetToDefaults() end,
+                    })
+                end
+            end
+            addon._screen = SettingsScreen:New(addon)
         end
     end
 
     -- ── Display ──────────────────────────────────────────────
 
-    function registration:Show()
-        EnsureScreen()
-        self._screen:Show()
+    function addon:Show()    EnsureScreen(); self._screen:Show()   end
+    function addon:Hide()    if self._screen then self._screen:Hide()   end end
+    function addon:Toggle()  EnsureScreen(); self._screen:Toggle() end
+
+    -- Internal: called by entry builders after a structural change
+    -- (add/remove/update setting) or when allowRefresh is false and
+    -- a user interaction has changed a value.
+    function addon:_RefreshList()
+        if self._screen then self._screen:RefreshList() end
     end
 
-    function registration:Hide()
-        if self._screen then self._screen:Hide() end
-    end
-
-    function registration:Toggle()
-        EnsureScreen()
-        self._screen:Toggle()
-    end
-
-    -- Internal: called by entry builders after a value changes.
-    function registration:_RefreshList()
-        if self._screen then
-            self._screen:RefreshList()
+    -- Internal: called by every builder's write path after a user
+    -- interaction changes a value.
+    -- • allowRefresh = true  → targeted SyncDisplay + RefreshVisible on
+    --                          just this entry (cheap, no repopulate).
+    -- • allowRefresh = false → falls back to a full _RefreshList so the
+    --                          row still updates correctly.
+    function addon:_OnSettingWritten(entry)
+        if self.allowRefresh then
+            if self._screen and entry.SyncDisplay then
+                -- The entry already updated its own subLabel before this
+                -- call, so SyncDisplay will see no change and return false.
+                -- We therefore call RefreshVisible directly.
+                if SCENE_MANAGER:IsShowing(self._screen.sceneName) then
+                    self._screen.list:RefreshVisible()
+                end
+            end
+        else
+            self:_RefreshList()
         end
     end
 
-    -- ── Dynamic option management ─────────────────────────────
+    -- ── Trigger-based refresh ─────────────────────────────────
 
-    function registration:AddOption(def, afterName)
-        assert(type(def) == "table", "[AddonSettings] AddOption: def must be a table")
-        assert(def.type  ~= nil,     "[AddonSettings] AddOption: def.type is required")
+    -- Build the canonical def reference from a name, def table, or handle.
+    local function ResolveDef(nameOrDefOrHandle)
+        if type(nameOrDefOrHandle) == "string" then
+            local _, def = FindSetting(self.controls, nameOrDefOrHandle)
+            return def
+        elseif type(nameOrDefOrHandle) == "table" then
+            -- Accept either a raw def or a settingHandle (.def field)
+            if nameOrDefOrHandle.def then
+                return nameOrDefOrHandle.def
+            end
+            return nameOrDefOrHandle
+        end
+    end
 
-        ApplyControlDefault(self.savedVars, def)
+    ---Sync the display of a single setting on demand.
+    ---nameOrDefOrHandle: the setting's name string, its def table,
+    ---                   or the handle returned by AddSetting.
+    function addon:RefreshSetting(nameOrDefOrHandle)
+        if not self._screen then return end
+        local def = ResolveDef(nameOrDefOrHandle)
+        if def then
+            self._screen:RefreshSetting(def)
+        end
+    end
+
+    ---Sync the display of every setting at once.
+    ---Use after a bulk external change (e.g. profile load).
+    function addon:RefreshAll()
+        if not self._screen then return end
+        self._screen:RefreshAll()
+    end
+
+    -- ── Setting management ────────────────────────────────────
+
+    ---Add a new setting and return a handle for it.
+    ---@param def       table
+    ---@param afterName string|nil
+    ---@return table settingHandle  { def=def, Refresh=fn }
+    function addon:AddSetting(def, afterName)
+        assert(type(def) == "table", "[LibSettingsService] AddSetting: def must be a table")
+        assert(def.type  ~= nil,     "[LibSettingsService] AddSetting: def.type is required")
+
+        ApplySettingDefault(self.savedVars, def)
+
+        -- Keep new settings above the auto-defaults button
+        local insertBefore
+        for i, ctrl in ipairs(self.controls) do
+            if ctrl._isDefaultsButton then insertBefore = i; break end
+        end
 
         if afterName then
-            local idx = FindControl(self.controls, afterName)
+            local idx = FindSetting(self.controls, afterName)
             if idx then
                 table.insert(self.controls, idx + 1, def)
                 self:_RefreshList()
-                return def
+                -- fall through to build the handle below
+                goto handle
             end
         end
 
-        table.insert(self.controls, def)
+        if insertBefore then
+            table.insert(self.controls, insertBefore, def)
+        else
+            table.insert(self.controls, def)
+        end
+
+        ::handle::
         self:_RefreshList()
-        return def
+
+        -- Build the settingHandle that the caller holds onto
+        local handle = {
+            def = def,
+        }
+        function handle:Refresh()
+            addon:RefreshSetting(self.def)
+        end
+
+        self._handleByDef[def] = handle
+        return handle
     end
 
-    function registration:RemoveOption(nameOrDef)
-        local idx = FindControl(self.controls, nameOrDef)
+    ---Remove a setting. Accepts a name, def, or handle.
+    function addon:RemoveSetting(nameOrDefOrHandle)
+        local target = (type(nameOrDefOrHandle) == "table" and nameOrDefOrHandle.def)
+            or nameOrDefOrHandle
+        local idx = FindSetting(self.controls, target)
         if idx then
+            local def = self.controls[idx]
+            self._handleByDef[def] = nil
             table.remove(self.controls, idx)
             self:_RefreshList()
         else
-            d(string.format("[AddonSettings] RemoveOption: '%s' not found in '%s'",
-                tostring(nameOrDef), tostring(self.name)))
+            d(string.format("[LibSettingsService] RemoveSetting: '%s' not found in '%s'",
+                tostring(nameOrDefOrHandle), tostring(self.name)))
         end
     end
 
-    function registration:UpdateOption(nameOrDef, changes)
-        assert(type(changes) == "table", "[AddonSettings] UpdateOption: changes must be a table")
-        local _, def = FindControl(self.controls, nameOrDef)
+    ---Merge changes into an existing def and refresh.
+    function addon:UpdateSetting(nameOrDefOrHandle, changes)
+        assert(type(changes) == "table", "[LibSettingsService] UpdateSetting: changes must be a table")
+        local target = (type(nameOrDefOrHandle) == "table" and nameOrDefOrHandle.def)
+            or nameOrDefOrHandle
+        local _, def = FindSetting(self.controls, target)
         if def then
-            for k, v in pairs(changes) do
-                def[k] = v
-            end
-            ApplyControlDefault(self.savedVars, def)
+            for k, v in pairs(changes) do def[k] = v end
+            ApplySettingDefault(self.savedVars, def)
             self:_RefreshList()
         else
-            d(string.format("[AddonSettings] UpdateOption: '%s' not found in '%s'",
-                tostring(nameOrDef), tostring(self.name)))
+            d(string.format("[LibSettingsService] UpdateSetting: '%s' not found in '%s'",
+                tostring(nameOrDefOrHandle), tostring(self.name)))
         end
     end
 
-    function registration:GetOption(name)
-        local _, def = FindControl(self.controls, name)
+    ---Return the def table for the first setting whose .name matches.
+    function addon:GetSetting(name)
+        local _, def = FindSetting(self.controls, name)
         return def
     end
 
-    return registration
+    ---Reset every setting with a .default back to that value.
+    function addon:ResetToDefaults()
+        for _, ctrl in ipairs(self.controls) do
+            if ctrl.default ~= nil and not ctrl._isDefaultsButton then
+                ResolveSet(ctrl, self.savedVars, ctrl.default)
+            end
+        end
+        self:_RefreshList()
+    end
+
+    return addon
 end
