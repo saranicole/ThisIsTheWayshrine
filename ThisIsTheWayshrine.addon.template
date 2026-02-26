@@ -9,7 +9,6 @@
 ## Version: ${ADDON_VERSION}
 ## APIVersion: 101048 101049
 ## AddOnVersion: 1
-## DependsOn: LibHarvensAddonSettings>=2.0.7
 ## SavedVariables: ThisIsTheWayshrine_Vars
 
 ## Settings helper

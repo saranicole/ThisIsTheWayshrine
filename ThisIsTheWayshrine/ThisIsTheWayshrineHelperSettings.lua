@@ -6,10 +6,10 @@ if not LibSettingsService then
     return
 end
 
-function TITW:HelperMenu()
+function TITW.BuildMenu()
 
   local panel = LAM:AddAddon(TITW.Name, {
-    savedVars = self.SV,
+    savedVars = TITW.SV,
     allowDefaults = false,  -- Show "Reset to Defaults" button
     allowRefresh = true    -- Enable automatic control updates
   })
@@ -18,27 +18,27 @@ function TITW:HelperMenu()
     type = "checkbox",
     name = TITW.Lang.ENABLE_JUMPING,
     getFunction = function()
-      return self.SV.enableJumping
+      return TITW.SV.enableJumping
     end,
     setFunction = function(var)
-      self.SV.enableJumping = var
+      TITW.SV.enableJumping = var
       if var then
         TITW.checkGuildMembersCurrentZoneAndJump()
       end
     end,
-    default = self.SV.enableJumping
+    default = TITW.SV.enableJumping
   }
 
   panel:AddSetting {
     type = "checkbox",
     name = TITW.Lang.ANNOUNCE,
     getFunction = function()
-      return self.SV.announce
+      return TITW.SV.announce
     end,
     setFunction = function(var)
-      self.SV.announce = var
+      TITW.SV.announce = var
     end,
-    default = self.SV.announce
+    default = TITW.SV.announce
   }
 
   panel:AddSetting {
@@ -78,13 +78,13 @@ function TITW:HelperMenu()
     type = "checkbox",
     name = TITW.Lang.TOGGLE_ALL_ZONES,
     getFunction = function()
-      return self.SV.selectAll
+      return TITW.SV.selectAll
     end,
     setFunction = function(var)
       TITW.toggleAvailableZones(var)
-      self.SV.selectAll = var
+      TITW.SV.selectAll = var
     end,
-    default = self.SV.selectAll
+    default = TITW.SV.selectAll
   }
 
   for i, data in pairs(GAMEPAD_WORLD_MAP_LOCATIONS.data.mapData) do
@@ -94,29 +94,26 @@ function TITW:HelperMenu()
       type = "checkbox",
       name = data.locationName,
       getFunction = function()
-        if self.SV.enabledZones[zoneId] ~= nil then
-          return self.SV.enabledZones[zoneId].enabled
+        if TITW.SV.enabledZones[zoneId] ~= nil then
+          return TITW.SV.enabledZones[zoneId].enabled
         end
-        return self.SV.selectAll
+        return TITW.SV.selectAll
       end,
       setFunction = function(var)
         if zoneId ~= nil then
-          if self.SV.enabledZones[zoneId] == nil then
-            self.SV.enabledZones[zoneId] = TITW:enumerateWayshrines(nil, zoneId)
+          if TITW.SV.enabledZones[zoneId] == nil then
+            TITW.SV.enabledZones[zoneId] = TITW:enumerateWayshrines(nil, zoneId)
           end
-          self.SV.enabledZones[zoneId].enabled = var
+          TITW.SV.enabledZones[zoneId].enabled = var
         end
       end,
-      default = self.SV.selectAll,
+      default = TITW.SV.selectAll,
       disable = function()
         return not ZONE_STORIES_GAMEPAD.IsZoneCollectibleUnlocked(zoneId) and not TITW:GetZoneFullyDiscovered(zoneId)
       end
     }
   end
-end
-
-function TITW.BuildMenu()
-  SLASH_COMMANDS["/titwsettings"] = function(args)
-    TITW:HelperMenu()
+  SLASH_COMMANDS["/thisistheway"] = function(args)
+    panel:Show()
   end
 end
