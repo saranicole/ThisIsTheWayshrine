@@ -3,8 +3,8 @@
 --  Drop-in settings framework for Elder Scrolls Online addons
 --  targeting the CONSOLE / GAMEPAD UI layer.
 --
---  NO XML FILE REQUIRED - uses only ZOS stock virtual templates
---  and the native GAMEPAD_TEXT_INPUT dialog.
+--  NO XML FILE REQUIRED - all controls are created programmatically
+--  via WINDOW_MANAGER. Uses the native GAMEPAD_TEXT_INPUT dialog.
 --
 --  UI system:  ZO_Gamepad parametric scroll list
 --  SavedVars:  caller passes in their own pre-loaded SV table
@@ -591,12 +591,27 @@ function SettingsScreen:Initialize(addon)
     -- the whole list.
     self._entryByDef = {}
 
-    self.control = WINDOW_MANAGER:CreateControlFromVirtual(
-        self.sceneName .. "_Control", GuiRoot, "ZO_GamepadParametricScrollScreen")
+    -- Build the root control manually. ZO_GamepadParametricScrollScreen
+    -- is an internal ZOS base class, not an instantiable virtual template.
+    -- We create a plain full-screen backdrop and attach the parametric
+    -- scroll list to it ourselves.
+    self.control = WINDOW_MANAGER:CreateControl(
+        self.sceneName .. "_Control", GuiRoot, CT_CONTROL)
+    self.control:SetAnchorFill(GuiRoot)
     self.control:SetHidden(true)
 
-    self.list = self.control:GetNamedChild("ParametricScrollList")
-        or ZO_GamepadVerticalParametricScrollList:New(self.control)
+    -- Background — matches the standard gamepad menu backdrop colour.
+    local bg = WINDOW_MANAGER:CreateControl(
+        self.sceneName .. "_BG", self.control, CT_BACKDROP)
+    bg:SetAnchorFill(self.control)
+    bg:SetCenterColor(0, 0, 0, 0.9)
+    bg:SetEdgeColor(0, 0, 0, 0)
+    bg:SetEdgeSize(0)
+
+    -- Parametric scroll list — this is the real workhorse.
+    self.list = ZO_GamepadVerticalParametricScrollList:New(self.control)
+    self.list:SetAnchor(TOPLEFT,  self.control, TOPLEFT,  60, 120)
+    self.list:SetAnchor(BOTTOMRIGHT, self.control, BOTTOMRIGHT, -60, -60)
 
     self:_SetupTemplates()
     self:_SetupScene()
