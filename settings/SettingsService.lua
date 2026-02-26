@@ -3,8 +3,8 @@
 --  Drop-in settings framework for Elder Scrolls Online addons
 --  targeting the CONSOLE / GAMEPAD UI layer.
 --
---  NO XML FILE REQUIRED - uses only ZOS stock virtual templates
---  and the native GAMEPAD_TEXT_INPUT dialog.
+--  NO XML FILE REQUIRED - all controls are created programmatically
+--  via WINDOW_MANAGER. Uses the native GAMEPAD_TEXT_INPUT dialog.
 --
 --  UI system:  ZO_Gamepad parametric scroll list
 --  SavedVars:  caller passes in their own pre-loaded SV table
@@ -57,6 +57,19 @@
 --        Add a setting. Returns a handle with:
 --            handle:Refresh()   – sync this row's display on demand
 --            handle.def         – the underlying definition table
+--
+--        Each setting stores its value via ONE of two approaches:
+--
+--        Key-based (standard savedVars storage):
+--            key         = "some.path"   dot-path into savedVars
+--            default     = <value>       written once if key is absent
+--
+--        Function-based (custom / computed storage):
+--            getFunction = function() return MyAddon.someValue end
+--            setFunction = function(v) MyAddon.someValue = v end
+--            Both must be supplied together. When present, key and
+--            default are ignored for read/write. allowRefresh still
+--            works correctly – getFunction is called on each SyncDisplay.
 --
 --    addon:RefreshSetting(nameOrDef)
 --        Trigger a display refresh for a specific setting by name
@@ -578,12 +591,26 @@ function SettingsScreen:Initialize(addon)
     -- the whole list.
     self._entryByDef = {}
 
-    self.control = WINDOW_MANAGER:CreateControlFromVirtual(
-        self.sceneName .. "_Control", GuiRoot, "ZO_GamepadParametricScrollScreen")
+    -- Build the root control manually. ZO_GamepadParametricScrollScreen
+    -- is an internal ZOS base class, not an instantiable virtual template.
+    -- We create a plain full-screen backdrop and attach the parametric
+    -- scroll list to it ourselves.
+    self.control = WINDOW_MANAGER:CreateControl(
+        self.sceneName .. "_Control", GuiRoot, CT_CONTROL)
+    self.control:SetAnchorFill(GuiRoot)
     self.control:SetHidden(true)
 
-    self.list = self.control:GetNamedChild("ParametricScrollList")
-        or ZO_GamepadVerticalParametricScrollList:New(self.control)
+    -- Background — matches the standard gamepad menu backdrop colour.
+    local bg = WINDOW_MANAGER:CreateControl(
+        self.sceneName .. "_BG", self.control, CT_BACKDROP)
+    bg:SetAnchorFill(self.control)
+    bg:SetCenterColor(0, 0, 0, 0.9)
+    bg:SetEdgeTexture("", 1, 1, 0)   -- empty texture, no visible border
+
+    -- Parametric scroll list — this is the real workhorse.
+    self.list = ZO_GamepadVerticalParametricScrollList:New(self.control)
+    self.list:SetAnchor(TOPLEFT,  self.control, TOPLEFT,  60, 120)
+    self.list:SetAnchor(BOTTOMRIGHT, self.control, BOTTOMRIGHT, -60, -60)
 
     self:_SetupTemplates()
     self:_SetupScene()
@@ -819,14 +846,53 @@ end
 
   Value storage – choose ONE approach:
 
-  ── key-based (standard saved-variable storage) ───────────────
-    key          (string)    Dot-path into savedVars e.g. "ui.scale"
-    default      (any)       Written once to savedVars if key is absent.
+  ── Approach 1: key-based (standard saved-variable storage) ────────
+    key          (string)    Dot-path into savedVars, e.g. "ui.scale".
+                             Supports nested paths: "display.hud.scale"
+    default      (any)       Written once to savedVars when the key is
+                             absent on first load. Ignored when
+                             getFunction is present.
 
-  ── function-based (custom / computed storage) ────────────────
-    getFunction  (function)  Called with no args; returns current value.
-    setFunction  (function)  Called with (value); stores it as needed.
-    Both must be supplied together. key/default are ignored for I/O.
+    Example:
+      { type="slider", name="Opacity",
+        key="display.opacity", default=80, min=0, max=100, step=5 }
+
+  ── Approach 2: function-based (custom / computed storage) ─────────
+    getFunction  (function)  Called with no arguments. Must return the
+                             current value of the setting. Used instead
+                             of reading from savedVars.
+    setFunction  (function)  Called with (newValue) when the user
+                             changes the setting. Responsible for
+                             storing the value wherever needed. Use a
+                             no-op -- function(_) end -- for read-only
+                             or computed display-only controls.
+
+    Rules:
+      - Both getFunction and setFunction must be supplied together.
+      - When both are present, key and default are ignored for
+        read/write (key may still appear as documentation).
+      - allowRefresh works correctly with function-based controls:
+        getFunction is called on each SyncDisplay / Refresh call so
+        the row always reflects whatever your getter returns.
+
+    Examples:
+
+      -- Value lives in your own table, not in savedVars:
+      { type = "checkbox", name = "Debug Mode",
+        getFunction = function() return MyAddon.debugMode end,
+        setFunction = function(v) MyAddon.debugMode = v end }
+
+      -- Read-only computed display (no-op setter):
+      { type = "slider", name = "Current Latency (ms)",
+        min = 0, max = 1000, step = 1,
+        getFunction = function() return GetLatency() end,
+        setFunction = function(_) end }
+
+      -- Wraps another system's API:
+      { type = "dropdown", name = "Difficulty",
+        choices = { "Easy", "Normal", "Hard" },
+        getFunction = function() return MyAddon:GetDifficulty() end,
+        setFunction = function(v) MyAddon:SetDifficulty(v) end }
 
   Per-type extras:
     checkbox    – (none)
@@ -1007,29 +1073,32 @@ function LibSettingsService:AddAddon(addonName, config)
 
         ApplySettingDefault(self.savedVars, def)
 
-        -- Keep new settings above the auto-defaults button
-        local insertBefore
-        for i, ctrl in ipairs(self.controls) do
-            if ctrl._isDefaultsButton then insertBefore = i; break end
-        end
+        -- Determine insert position. Priority:
+        --   1. Immediately after afterName (if supplied and found)
+        --   2. Immediately before the auto-defaults button (if present)
+        --   3. Append to end
+        local inserted = false
 
         if afterName then
             local idx = FindSetting(self.controls, afterName)
             if idx then
                 table.insert(self.controls, idx + 1, def)
-                self:_RefreshList()
-                -- fall through to build the handle below
-                goto handle
+                inserted = true
             end
         end
 
-        if insertBefore then
-            table.insert(self.controls, insertBefore, def)
-        else
-            table.insert(self.controls, def)
+        if not inserted then
+            local insertBefore
+            for i, ctrl in ipairs(self.controls) do
+                if ctrl._isDefaultsButton then insertBefore = i; break end
+            end
+            if insertBefore then
+                table.insert(self.controls, insertBefore, def)
+            else
+                table.insert(self.controls, def)
+            end
         end
 
-        ::handle::
         self:_RefreshList()
 
         -- Build the settingHandle that the caller holds onto
