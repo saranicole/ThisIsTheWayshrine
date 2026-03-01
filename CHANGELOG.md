@@ -1,3 +1,6 @@
+## 2026.02.28
+- Use Settings Helper
+
 ## 2026.01.25
 - Exclude Imperial City zones from jump attempts
 - Fix guild disable/enable
