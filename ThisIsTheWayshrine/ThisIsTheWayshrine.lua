@@ -244,7 +244,6 @@ local function OnAddOnLoaded(eventCode, addonName)
   TITW.SwitchSV()
   TITW.BuildZoneNameCache()
   zo_callLater(function()
-    TITW.BuildMenu()
     if TITW.SV.firstTimeLoad or select(1, TITW.AV.enableOverrideGuilds).initial == nil then
       TITW.toggleAvailableZones(true)
       TITW.toggleAvailableGuilds()
@@ -258,6 +257,7 @@ end
 -- Start Here
 EVENT_MANAGER:RegisterForEvent(TITW.Name, EVENT_ADD_ON_LOADED, OnAddOnLoaded)
 EVENT_MANAGER:RegisterForEvent("TITW_PlayerActivated", EVENT_PLAYER_ACTIVATED, function()
+    TITW:BuildMenu()
     TITW.isTeleporting = false
     zo_callLater(TITW.checkGuildMembersCurrentZoneAndJump, TITW.waitToJumpDuration)
 end

@@ -1,21 +1,26 @@
 local TITW = ThisIsTheWayshrine
 
-local LAM = LibHarvensAddonSettings
+local LAM = LibSettingsService
 
-if not LibHarvensAddonSettings then
+if not LibSettingsService then
+    return
+end
+
+if LibHarvensAddonSettings then
     return
 end
 
 function TITW:BuildMenu()
 
-  self.panel = LAM:AddAddon(TITW.Name, {
+  self.panel = LAM:AddAddon(self.Name, {
+    savedVars = TITW.SV,
     allowDefaults = false,  -- Show "Reset to Defaults" button
     allowRefresh = true    -- Enable automatic control updates
   })
 
   self.panel:AddSetting {
-    type = LAM.ST_CHECKBOX,
-    label = TITW.Lang.ENABLE_JUMPING,
+    type = "checkbox",
+    name = TITW.Lang.ENABLE_JUMPING,
     getFunction = function()
       return TITW.SV.enableJumping
     end,
@@ -29,8 +34,8 @@ function TITW:BuildMenu()
   }
 
   self.panel:AddSetting {
-    type = LAM.ST_CHECKBOX,
-    label = TITW.Lang.ANNOUNCE,
+    type = "checkbox",
+    name = TITW.Lang.ANNOUNCE,
     getFunction = function()
       return TITW.SV.announce
     end,
@@ -41,15 +46,15 @@ function TITW:BuildMenu()
   }
 
   self.panel:AddSetting {
-    type = LAM.ST_SECTION,
-    label = TITW.Lang.GUILD_ENABLE_HEADER
+    type = "header",
+    name = TITW.Lang.GUILD_ENABLE_HEADER
   }
 
   for iDex = 1, GetNumGuilds() do
     local guildId = GetGuildId(iDex)
     self.panel:AddSetting {
-      type = LAM.ST_CHECKBOX,
-      label = GetGuildName(guildId),
+      type = "checkbox",
+      name = GetGuildName(guildId),
       getFunction = function()
         if not TITW.AV.enableOverrideGuilds[guildId].initial then
           return TITW.AV.enableOverrideGuilds[guildId].enabled
@@ -69,13 +74,13 @@ function TITW:BuildMenu()
   end
 
   self.panel:AddSetting {
-    type = LAM.ST_SECTION,
-    label = TITW.Lang.TOGGLE_ZONE_DISCOVERY,
+    type = "header",
+    name = TITW.Lang.TOGGLE_ZONE_DISCOVERY,
   }
 
   self.panel:AddSetting {
-    type = LAM.ST_CHECKBOX,
-    label = TITW.Lang.TOGGLE_ALL_ZONES,
+    type = "checkbox",
+    name = TITW.Lang.TOGGLE_ALL_ZONES,
     getFunction = function()
       return TITW.SV.selectAll
     end,
@@ -90,8 +95,8 @@ function TITW:BuildMenu()
     local locationName = data.locationName
     local zoneId = TITW:GetZoneIdFromZoneName(locationName)
     self.panel:AddSetting {
-      type = LAM.ST_CHECKBOX,
-      label = data.locationName,
+      type = "checkbox",
+      name = data.locationName,
       getFunction = function()
         if TITW.SV.enabledZones[zoneId] ~= nil then
           return TITW.SV.enabledZones[zoneId].enabled
