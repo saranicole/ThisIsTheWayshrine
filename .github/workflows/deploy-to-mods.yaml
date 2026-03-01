@@ -36,6 +36,9 @@ jobs:
           echo "ADDON_VERSION=$version" >> $GITHUB_ENV
 
           echo "ZIP_FULL_NAME=${addon_name}-${version}.zip" >> $GITHUB_ENV
+      - name: Update helper
+        run: |
+          git subtree add --prefix=${{ env.REPO_NAME }}/helper git@github.com:saranicole/eso-settings-service.git main --squash
       - name: Create addon file
         run: |
           cat ${{ github.workspace }}/${{ env.REPO_NAME }}.addon.template | envsubst > ${{ github.workspace }}/${{ env.REPO_NAME }}/${{ env.REPO_NAME }}.addon
