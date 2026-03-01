@@ -1,5 +1,6 @@
 ## 2026.02.28
 - Use Settings Helper
+- Took Settings Helper back out in favor of LibVotans
 
 ## 2026.01.25
 - Exclude Imperial City zones from jump attempts

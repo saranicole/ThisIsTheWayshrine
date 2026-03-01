@@ -10,13 +10,9 @@
 ## APIVersion: 101048 101049
 ## AddOnVersion: 1
 ## SavedVariables: ThisIsTheWayshrine_Vars
-
-## Settings helper
-helper/settings/SettingsService.xml
-helper/settings/SettingsService.lua
+## DependsOn: LibHarvensAddonSettings>=20101
 
 ThisIsTheWayshrine.lua
 ThisIsTheWayshrineSettings.lua
-ThisIsTheWayshrineHelperSettings.lua
 lang/en.lua
 lang/$(language).lua
