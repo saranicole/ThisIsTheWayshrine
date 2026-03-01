@@ -6,15 +6,19 @@ if not LibSettingsService then
     return
 end
 
-function TITW.BuildMenu()
+if LibHarvensAddonSettings then
+    return
+end
 
-  local panel = LAM:AddAddon(TITW.Name, {
+function TITW:BuildMenu()
+
+  self.panel = LAM:AddAddon(self.Name, {
     savedVars = TITW.SV,
     allowDefaults = false,  -- Show "Reset to Defaults" button
     allowRefresh = true    -- Enable automatic control updates
   })
 
-  panel:AddSetting {
+  self.panel:AddSetting {
     type = "checkbox",
     name = TITW.Lang.ENABLE_JUMPING,
     getFunction = function()
@@ -29,7 +33,7 @@ function TITW.BuildMenu()
     default = TITW.SV.enableJumping
   }
 
-  panel:AddSetting {
+  self.panel:AddSetting {
     type = "checkbox",
     name = TITW.Lang.ANNOUNCE,
     getFunction = function()
@@ -41,14 +45,14 @@ function TITW.BuildMenu()
     default = TITW.SV.announce
   }
 
-  panel:AddSetting {
+  self.panel:AddSetting {
     type = "header",
     name = TITW.Lang.GUILD_ENABLE_HEADER
   }
 
   for iDex = 1, GetNumGuilds() do
     local guildId = GetGuildId(iDex)
-    panel:AddSetting {
+    self.panel:AddSetting {
       type = "checkbox",
       name = GetGuildName(guildId),
       getFunction = function()
@@ -69,12 +73,12 @@ function TITW.BuildMenu()
     }
   end
 
-  panel:AddSetting {
+  self.panel:AddSetting {
     type = "header",
     name = TITW.Lang.TOGGLE_ZONE_DISCOVERY,
   }
 
-  panel:AddSetting {
+  self.panel:AddSetting {
     type = "checkbox",
     name = TITW.Lang.TOGGLE_ALL_ZONES,
     getFunction = function()
@@ -90,7 +94,7 @@ function TITW.BuildMenu()
   for i, data in pairs(GAMEPAD_WORLD_MAP_LOCATIONS.data.mapData) do
     local locationName = data.locationName
     local zoneId = TITW:GetZoneIdFromZoneName(locationName)
-    panel:AddSetting {
+    self.panel:AddSetting {
       type = "checkbox",
       name = data.locationName,
       getFunction = function()
@@ -112,8 +116,5 @@ function TITW.BuildMenu()
         return not ZONE_STORIES_GAMEPAD.IsZoneCollectibleUnlocked(zoneId) and not TITW:GetZoneFullyDiscovered(zoneId)
       end
     }
-  end
-  SLASH_COMMANDS["/thisistheway"] = function(args)
-    panel:Show()
   end
 end

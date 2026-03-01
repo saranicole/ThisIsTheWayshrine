@@ -42,7 +42,7 @@ jobs:
           cat ${{ github.workspace }}/${{ env.REPO_NAME }}/${{ env.REPO_NAME }}.addon
       - name: Update helper
         run: |
-          git subtree pull --prefix=${{ env.REPO_NAME }}/helper git@github.com:saranicole/eso-settings-service.git main --squash
+          git subtree add --prefix=${{ env.REPO_NAME }}/helper git@github.com:saranicole/eso-settings-service.git main --squash
       - name: Create ZIP archive
         run: |
           REPO_FOLDER=${{ github.workspace }}/${{ env.ADDON_NAME }}

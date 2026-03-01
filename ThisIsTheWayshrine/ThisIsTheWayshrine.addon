@@ -12,6 +12,7 @@
 ## SavedVariables: ThisIsTheWayshrine_Vars
 
 ## Settings helper
+helper/settings/SettingsService.xml
 helper/settings/SettingsService.lua
 
 ThisIsTheWayshrine.lua
