@@ -235,9 +235,6 @@ end
 
 function TITW.checkStalled()
   if TITW.SV.enableJumping then
-    if GetDisplayName() == "@Saranicole1980" then
-      d(guildByGuildObj)
-    end
     if guildByGuildObj.prevJumps == guildByGuildObj.numJumps then
       zo_callLater(TITW.checkGuildMembersCurrentZoneAndJump, 2000)
     end
@@ -278,7 +275,6 @@ function TITW.checkGuildMembersCurrentZoneAndJump()
           break
         end
       end
-      alreadyJumpedTo[e.displayName] = e.zoneId
     end
     guildIndex = guildIndex + 1
     if guildIndex > GetNumGuilds() then
@@ -288,7 +284,7 @@ function TITW.checkGuildMembersCurrentZoneAndJump()
     guildByGuildObj.guildIndex = guildIndex
     guildByGuildObj.memberIndex = memberIndex + 1
     guildByGuildObj.alreadyJumpedTo = alreadyJumpedTo
-    TITW.checkStalled()
+    zo_callLater(TITW.checkStalled, 5000)
   end
 end
 
