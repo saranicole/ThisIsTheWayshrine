@@ -40,7 +40,7 @@ TITW.zoneExceptions = { 181, 584, 643 }
 TITW.guildCompositions = {}
 
 if IsConsoleUI() then
-  TITW.waitToJumpDuration = 10000
+  TITW.waitToJumpDuration = 12000
 end
 
 local guildByGuildType = "guildbyguild"
@@ -235,6 +235,9 @@ end
 
 function TITW.checkStalled()
   if TITW.SV.enableJumping then
+    if GetDisplayName() == "@Saranicole1980" then
+      d(guildByGuildObj)
+    end
     if guildByGuildObj.prevJumps == guildByGuildObj.numJumps then
       zo_callLater(TITW.checkGuildMembersCurrentZoneAndJump, 2000)
     end
