@@ -43,6 +43,9 @@ if IsConsoleUI() then
   TITW.waitToJumpDuration = 10000
 end
 
+local guildByGuildType = "guildbyguild"
+local guildByGuildObj = {  numJumps = 0, completedZones = {}, alreadyJumpedTo = {} }
+
 function TITW.isValueInTable(table, element)
   for _, v in ipairs(table) do
     if element == v then
@@ -108,6 +111,68 @@ function TITW:enumerateWayshrines(zoneIdex, providedZoneId)
   return {enabled = true, totalWayshrines = totalWayshrines, knownWayshrines = knownWayshrines}
 end
 
+local TITW_GUILD_CACHE_TTL    = TITW.GUILD_CACHE_TTL or 5
+TITW.GuildCache = TITW.GuildCache or {}
+local TITW_GuildCache = TITW.GuildCache
+local function IsGuildCacheValid(guildId)
+    local cache = TITW_GuildCache[guildId]
+    if not cache then return false end
+    return (GetFrameTimeSeconds() - cache.timestamp) < TITW_GUILD_CACHE_TTL
+end
+
+
+local function GetGuildMemberStatusTable(guildId, guildIndex)
+    if IsGuildCacheValid(guildId) then
+        return TITW_GuildCache[guildId].members
+    end
+
+    local members    = {}
+    local e = {}
+
+    local numMembers = GetNumGuildMembers(guildId)
+
+    for j = 1, numMembers do
+        e.displayName, e.Note, e.GuildMemberRankIndex, e.status, e.secsSinceLogoff = GetGuildMemberInfo(guildId, j)
+        e.hasCharacter, e.characterName, e.zoneName, e.classType, e.alliance, e.level, e.championRank, e.zoneId = GetGuildMemberCharacterInfo(guildId, j)
+        e.guildIndex = guildIndex
+        e.category = 1
+
+        if e.status ~= PLAYER_STATUS_OFFLINE then
+          table.insert(members, e)
+        end
+        e = {}
+    end
+
+    TITW_GuildCache[guildId] =
+    {
+        timestamp = GetFrameTimeSeconds(),
+        members   = members,
+    }
+    return members
+end
+
+function TITW.getGuildMembersCached(guildId, guildIndex)
+    local cache = TITW_GuildCache[guildId]
+    local now = GetGameTimeMilliseconds() / 1000
+    if cache and (now - cache.timestamp <= TITW_GUILD_CACHE_TTL) then
+        return cache.members
+    end
+    return GetGuildMemberStatusTable(guildId, guildIndex)
+end
+
+
+function TITW.maxGuildMembersOnline()
+  local max = 0
+  for i = 1, GetNumGuilds() do
+    local guildId = GetGuildId(i)
+    local totalGuildMembers = TITW.getGuildMembersCached(guildId, i)
+    if #totalGuildMembers > max then
+      max = #totalGuildMembers
+    end
+  end
+  return max
+end
+
 --Account/Character Setting
 function TITW.SwitchSV()
   if TITW.CV.CV then
@@ -149,9 +214,9 @@ end
 function TITW:triggerJump(displayName, zoneId, memberIndex)
   TITW.isTeleporting = true
   JumpToGuildMember(displayName)
-  TITW.alreadyJumpedTo[displayName] = zoneId
-  TITW.memberIndex = memberIndex
-  TITW.numJumps = TITW.numJumps + 1
+  guildByGuildObj.alreadyJumpedTo[displayName] = zoneId
+  guildByGuildObj.memberIndex = memberIndex
+  guildByGuildObj.numJumps = guildByGuildObj.numJumps + 1
 end
 
 local function validateTravel(zoneId)
@@ -170,68 +235,111 @@ end
 
 function TITW.checkStalled()
   if TITW.SV.enableJumping then
-    if TITW.prevJumps == TITW.numJumps then
-      TITW.stalledCounter = TITW.stalledCounter + 1
+    if guildByGuildObj.prevJumps == guildByGuildObj.numJumps then
+      zo_callLater(TITW.checkGuildMembersCurrentZoneAndJump, 2000)
     end
-    if TITW.stalledCounter > 0 then
-      TITW.isTeleporting = false
-      TITW.checkGuildMembersCurrentZoneAndJump()
-      TITW.stalledCounter = 0
-    end
-    TITW.prevJumps = TITW.numJumps
+    guildByGuildObj.prevJumps = guildByGuildObj.numJumps
   end
 end
 
+------------------------
+-- in the style of ThisIsTheWayshrine, goes guild by guild taking each player one at a time
 function TITW.checkGuildMembersCurrentZoneAndJump()
   if TITW.SV.enableJumping then
-      if next(TITW.alreadyJumpedTo) ~= nil then
-        EVENT_MANAGER:UnregisterForUpdate("TITW_CheckAndJump")
-      end
-      local guildId = GetGuildId(TITW.guildIndex)
-      TITW.guildCompositions[guildId] = { active = 0, inactive = 0 }
-      if TITW.AV.enableOverrideGuilds[guildId].initial or TITW.AV.enableOverrideGuilds[guildId].enabled then
-        for memberIndex = TITW.memberIndex, GetNumGuildMembers(guildId) do
-          local displayName, _, _, status, secsSinceLogoff = GetGuildMemberInfo(guildId, memberIndex)
-          local online = (status ~= PLAYER_STATUS_OFFLINE)
-          local _, _, _, _, _, _, _, zoneId = GetGuildMemberCharacterInfo(guildId, memberIndex)
-
-          -- six months in seconds
-          if secsSinceLogoff > 15638400 then
-            TITW.guildCompositions[guildId].inactive = TITW.guildCompositions[guildId].inactive + 1
-          else
-            TITW.guildCompositions[guildId].active = TITW.guildCompositions[guildId].active + 1
+    if guildByGuildObj.alreadyJumpedTo and next(guildByGuildObj.alreadyJumpedTo) ~= nil then
+      EVENT_MANAGER:UnregisterForUpdate("TITW_CheckAndJump")
+    end
+    local memberIndex = guildByGuildObj.memberIndex or 1
+    local guildIndex = guildByGuildObj.guildIndex or 1
+    local guildId = GetGuildId(guildIndex)
+    local members = TITW.getGuildMembersCached(guildId, guildIndex)
+    local maxMembers = guildByGuildObj.maxMembers
+    if maxMembers == nil then
+     maxMembers = TITW.maxGuildMembersOnline()
+    end
+    if memberIndex > maxMembers then
+      memberIndex = 1
+      maxMembers = TITW.maxGuildMembersOnline()
+    end
+    local alreadyJumpedTo = guildByGuildObj.alreadyJumpedTo or {}
+    for mIndex = memberIndex, #members do
+      local e = members[mIndex]
+      if e.displayName ~= GetDisplayName() and alreadyJumpedTo[e.displayName] ~= e.zoneId and not guildByGuildObj.completedZones[e.zoneId] then
+        -- do my own thing
+        if validateTravel(e.zoneId) then
+          TITW:triggerJump(e.displayName, e.zoneId, mIndex)
+          if TITW.SV.announce then
+            d(TITW.Lang.GUILD_NAME.." "..guildIndex..": "..GetGuildName(guildId)..", "..TITW.Lang.TRAVELING_TO.." "..e.displayName.." "..TITW.Lang.IN.." "..GetZoneNameById(e.zoneId))
           end
-
-          -- Online check
-          if online then
-            if displayName ~= GetDisplayName() and TITW.alreadyJumpedTo[displayName] ~= zoneId and TITW.errorJumpingTo[displayName] ~= zoneId then
-                local okToTravel = validateTravel(zoneId)
-                if okToTravel then
-                  if TITW.SV.announce then
-                    d(TITW.Lang.GUILD_NAME.." "..TITW.guildIndex..": "..GetGuildName(guildId)..", "..TITW.Lang.TRAVELING_TO.." "..displayName.." "..TITW.Lang.IN.." "..GetZoneNameById(zoneId))
-                  end
-                  TITW:triggerJump(displayName, zoneId, memberIndex)
-                  -- validJumpsAvailable = true
-                  break
-                end
-            end
-          end
+          memberIndex = mIndex
+          break
         end
       end
-      -- Do not try to jump to unpopulated guilds
-      if (GetNumGuildMembers(guildId) == 1 or TITW.guildCompositions[guildId].active < 4) and TITW.AV.enableOverrideGuilds[guildId].initial then
-        TITW.AV.enableOverrideGuilds[guildId] = { enabled = false, initial = false }
-      end
-      TITW.memberIndex = 1
-      TITW.guildIndex = TITW.guildIndex + 1
-      if TITW.guildIndex > GetNumGuilds() then
-        TITW.guildIndex = 1
-      end
-      if not TITW.AV.enableOverrideGuilds[guildId].enabled then
-        TITW.checkStalled()
-      end
+      alreadyJumpedTo[e.displayName] = e.zoneId
     end
+    guildIndex = guildIndex + 1
+    if guildIndex > GetNumGuilds() then
+      guildIndex = 1
+    end
+    guildByGuildObj.maxMembers = maxMembers
+    guildByGuildObj.guildIndex = guildIndex
+    guildByGuildObj.memberIndex = memberIndex + 1
+    guildByGuildObj.alreadyJumpedTo = alreadyJumpedTo
+    TITW.checkStalled()
+  end
 end
+
+-- 
+-- function TITW.checkGuildMembersCurrentZoneAndJump()
+--   if TITW.SV.enableJumping then
+--       if next(TITW.alreadyJumpedTo) ~= nil then
+--         EVENT_MANAGER:UnregisterForUpdate("TITW_CheckAndJump")
+--       end
+--       local guildId = GetGuildId(TITW.guildIndex)
+--       TITW.guildCompositions[guildId] = { active = 0, inactive = 0 }
+--       if TITW.AV.enableOverrideGuilds[guildId].initial or TITW.AV.enableOverrideGuilds[guildId].enabled then
+--         for memberIndex = TITW.memberIndex, GetNumGuildMembers(guildId) do
+--           local displayName, _, _, status, secsSinceLogoff = GetGuildMemberInfo(guildId, memberIndex)
+--           local online = (status ~= PLAYER_STATUS_OFFLINE)
+--           local _, _, _, _, _, _, _, zoneId = GetGuildMemberCharacterInfo(guildId, memberIndex)
+-- 
+--           -- six months in seconds
+--           if secsSinceLogoff > 15638400 then
+--             TITW.guildCompositions[guildId].inactive = TITW.guildCompositions[guildId].inactive + 1
+--           else
+--             TITW.guildCompositions[guildId].active = TITW.guildCompositions[guildId].active + 1
+--           end
+-- 
+--           -- Online check
+--           if online then
+--             if displayName ~= GetDisplayName() and TITW.alreadyJumpedTo[displayName] ~= zoneId and TITW.errorJumpingTo[displayName] ~= zoneId then
+--                 local okToTravel = validateTravel(zoneId)
+--                 if okToTravel then
+--                   if TITW.SV.announce then
+--                     d(TITW.Lang.GUILD_NAME.." "..TITW.guildIndex..": "..GetGuildName(guildId)..", "..TITW.Lang.TRAVELING_TO.." "..displayName.." "..TITW.Lang.IN.." "..GetZoneNameById(zoneId))
+--                   end
+--                   TITW:triggerJump(displayName, zoneId, memberIndex)
+--                   -- validJumpsAvailable = true
+--                   break
+--                 end
+--             end
+--           end
+--         end
+--       end
+--       -- Do not try to jump to unpopulated guilds
+--       if (GetNumGuildMembers(guildId) == 1 or TITW.guildCompositions[guildId].active < 4) and TITW.AV.enableOverrideGuilds[guildId].initial then
+--         TITW.AV.enableOverrideGuilds[guildId] = { enabled = false, initial = false }
+--       end
+--       TITW.memberIndex = 1
+--       TITW.guildIndex = TITW.guildIndex + 1
+--       if TITW.guildIndex > GetNumGuilds() then
+--         TITW.guildIndex = 1
+--       end
+--       if not TITW.AV.enableOverrideGuilds[guildId].enabled then
+--         TITW.checkStalled()
+--       end
+--     end
+-- end
 
 --When Loaded
 local function OnAddOnLoaded(eventCode, addonName)

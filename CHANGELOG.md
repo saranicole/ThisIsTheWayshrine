@@ -1,3 +1,6 @@
+## 2026.03.25
+- Hopefully fix callstack issue
+
 ## 2026.02.28
 - Use Settings Helper
 - Took Settings Helper back out in favor of LibVotans

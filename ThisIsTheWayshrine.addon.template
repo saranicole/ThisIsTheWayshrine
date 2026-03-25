@@ -7,8 +7,8 @@
 ## Title: ThisIsTheWayshrine
 ## Author: @Saranicole1980
 ## Version: ${ADDON_VERSION}
-## APIVersion: 101048 101049
-## AddOnVersion: 1
+## APIVersion: 101049 101050
+## AddOnVersion: ${ADDON_FORMATTED_VERSION}
 ## SavedVariables: ThisIsTheWayshrine_Vars
 ## DependsOn: LibHarvensAddonSettings>=20101
 
