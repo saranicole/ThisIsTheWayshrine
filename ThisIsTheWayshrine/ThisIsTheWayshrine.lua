@@ -254,14 +254,16 @@ function TITW.checkGuildMembersCurrentZoneAndJump()
     local guildId = GetGuildId(guildIndex)
     local members = TITW.getGuildMembersCached(guildId, guildIndex)
     local maxMembers = guildByGuildObj.maxMembers
+    local alreadyJumpedTo = guildByGuildObj.alreadyJumpedTo or {}
     if maxMembers == nil then
      maxMembers = TITW.maxGuildMembersOnline()
     end
     if memberIndex > maxMembers then
       memberIndex = 1
       maxMembers = TITW.maxGuildMembersOnline()
+      alreadyJumpedTo = {}
     end
-    local alreadyJumpedTo = guildByGuildObj.alreadyJumpedTo or {}
+    
     for mIndex = memberIndex, #members do
       local e = members[mIndex]
       if e.displayName ~= GetDisplayName() and alreadyJumpedTo[e.displayName] ~= e.zoneId and not guildByGuildObj.completedZones[e.zoneId] then
@@ -355,7 +357,7 @@ local function OnAddOnLoaded(eventCode, addonName)
       TITW.toggleAvailableZones(true)
       TITW.toggleAvailableGuilds()
       TITW.SV.firstTimeLoad = false
-      EVENT_MANAGER:RegisterForUpdate("TITW_CheckAndJump", 10000, TITW.checkGuildMembersCurrentZoneAndJump)
+      EVENT_MANAGER:RegisterForUpdate("TITW_CheckAndJump", TITW.waitToJumpDuration, TITW.checkGuildMembersCurrentZoneAndJump)
     end
     EVENT_MANAGER:RegisterForUpdate("TITW_CheckStalled", 45000, TITW.checkStalled)
   end, 1500)
