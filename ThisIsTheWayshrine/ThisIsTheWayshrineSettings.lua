@@ -41,7 +41,7 @@ function TITW:BuildMenu()
   }
 
   self.panel:AddSetting {
-    type = LAM.ST_SECTION,
+    type = LAM.ST_LABEL,
     label = TITW.Lang.GUILD_ENABLE_HEADER
   }
 
@@ -69,7 +69,7 @@ function TITW:BuildMenu()
   end
 
   self.panel:AddSetting {
-    type = LAM.ST_SECTION,
+    type = LAM.ST_LABEL,
     label = TITW.Lang.TOGGLE_ZONE_DISCOVERY,
   }
 
