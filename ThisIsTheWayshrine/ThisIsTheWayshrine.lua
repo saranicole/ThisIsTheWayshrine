@@ -39,7 +39,7 @@ TITW.waitToJumpDuration = 5000
 TITW.zoneExceptions = { 181, 584, 643 }
 TITW.guildCompositions = {}
 TITW.maxMembers = nil
-TITW.stalledFuncCounter = 100
+TITW.stalledFuncCounter = 3
 
 if IsConsoleUI() then
   TITW.waitToJumpDuration = 12000
@@ -345,25 +345,27 @@ function TITW.checkGuildMembersCurrentZoneAndJump()
         end
       end
     end
-    -- Do not try to jump to unpopulated guilds
-    if (GetNumGuildMembers(guildId) == 1 or TITW.guildCompositions[guildId].active < 4) and TITW.AV.enableOverrideGuilds[guildId].initial then
-      TITW.AV.enableOverrideGuilds[guildId] = { enabled = false, initial = false }
-    end
-    TITW.memberIndex = 1
-    TITW.guildIndex = TITW.guildIndex + 1
-    if TITW.guildIndex > GetNumGuilds() then
-      TITW.guildIndex = 1
-    end
-    if not TITW.AV.enableOverrideGuilds[guildId].enabled and TITW.stalledFuncCounter > 0 then
-      TITW.stalledFuncCounter = TITW.stalledFuncCounter - 1
-      TITW.checkStalled()
-    end
-    if TITW.stalledFuncCounter <= 0 then
-      TITW.SV.enableJumping = false
-      EVENT_MANAGER:UnregisterForEvent("TITW_PlayerActivated", EVENT_PLAYER_ACTIVATED)
-      EVENT_MANAGER:UnregisterForUpdate("TITW_CheckStalled")
-      d(TITW.Lang.TIME_OUT)
-      return
+    if not TITW.isTeleporting then
+      -- Do not try to jump to unpopulated guilds
+      if (GetNumGuildMembers(guildId) == 1 or TITW.guildCompositions[guildId].active < 4) and TITW.AV.enableOverrideGuilds[guildId].initial then
+        TITW.AV.enableOverrideGuilds[guildId] = { enabled = false, initial = false }
+      end
+      TITW.memberIndex = 1
+      TITW.guildIndex = TITW.guildIndex + 1
+      if TITW.guildIndex > GetNumGuilds() then
+        TITW.guildIndex = 1
+      end
+      if not TITW.AV.enableOverrideGuilds[guildId].enabled and TITW.stalledFuncCounter > 0 then
+        TITW.stalledFuncCounter = TITW.stalledFuncCounter - 1
+        TITW.checkStalled()
+      end
+      if TITW.stalledFuncCounter <= 0 then
+        TITW.SV.enableJumping = false
+        EVENT_MANAGER:UnregisterForEvent("TITW_PlayerActivated", EVENT_PLAYER_ACTIVATED)
+        EVENT_MANAGER:UnregisterForUpdate("TITW_CheckStalled")
+        d(TITW.Lang.TIME_OUT)
+        return
+      end
     end
   end
 end
@@ -394,7 +396,7 @@ EVENT_MANAGER:RegisterForEvent(TITW.Name, EVENT_ADD_ON_LOADED, OnAddOnLoaded)
 EVENT_MANAGER:RegisterForEvent("TITW_PlayerActivated", EVENT_PLAYER_ACTIVATED, function()
     TITW:BuildMenu()
     TITW.isTeleporting = false
-    TITW.stalledFuncCounter = 100
+    TITW.stalledFuncCounter = 3
     zo_callLater(TITW.checkGuildMembersCurrentZoneAndJump, TITW.waitToJumpDuration)
 end
 )
