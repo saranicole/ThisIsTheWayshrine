@@ -16,4 +16,5 @@ TITW.Lang = {
   TRAVELING_TO                     =         "traveling to",
   IN                               =         "in",
   GUILD_ENABLE_HEADER              =         "Guilds",
+  TIME_OUT                         =         "Wayshrine discovery timed out",
 }

@@ -1,3 +1,10 @@
+## 2026.05.28
+- Hopefully fix callstack issue again
+- Add multi-language support
+
+## 2026.05.19
+- Update Settings to work with recent LHAS update
+
 ## 2026.03.25
 - Hopefully fix callstack issue
 
