@@ -35,7 +35,7 @@ TITW.errorJumpingTo = {}
 TITW.prevJumps = 0
 TITW.numJumps = 0
 TITW.stalledCounter = 0
-TITW.waitToJumpDuration = 2500
+TITW.waitToJumpDuration = 5000
 TITW.zoneExceptions = { 181, 584, 643 }
 TITW.guildCompositions = {}
 TITW.maxMembers = nil
@@ -359,6 +359,9 @@ function TITW.checkGuildMembersCurrentZoneAndJump()
       TITW.checkStalled()
     end
     if TITW.stalledFuncCounter <= 0 then
+      TITW.SV.enableJumping = false
+      EVENT_MANAGER:UnregisterForEvent("TITW_PlayerActivated", EVENT_PLAYER_ACTIVATED)
+      EVENT_MANAGER:UnregisterForUpdate("TITW_CheckStalled")
       d(TITW.Lang.TIME_OUT)
       return
     end
